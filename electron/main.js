@@ -1,59 +1,11 @@
-const { app, BrowserWindow, Menu, shell, dialog, ipcMain } = require('electron')
+const { app, BrowserWindow, Menu, shell, ipcMain } = require('electron')
+const { autoUpdater } = require('electron-updater')
 const path = require('path')
 
-// 生产站点 URL，可通过环境变量覆盖
+// 生产站点 URL
 const SITE_URL = process.env.NB_SITE_URL || 'https://northbooker.xuanjian.top'
 
 let mainWindow
-
-function createMenu() {
-  const template = [
-    {
-      label: '北牖',
-      submenu: [
-        { label: '关于北牖', role: 'about' },
-        { type: 'separator' },
-        { label: '退出', role: 'quit' },
-      ],
-    },
-    {
-      label: '编辑',
-      submenu: [
-        { role: 'undo', label: '撤销' },
-        { role: 'redo', label: '重做' },
-        { type: 'separator' },
-        { role: 'cut', label: '剪切' },
-        { role: 'copy', label: '复制' },
-        { role: 'paste', label: '粘贴' },
-        { role: 'selectAll', label: '全选' },
-      ],
-    },
-    {
-      label: '视图',
-      submenu: [
-        { role: 'reload', label: '刷新' },
-        { role: 'forceReload', label: '强制刷新' },
-        { role: 'toggleDevTools', label: '开发者工具' },
-        { type: 'separator' },
-        { role: 'resetZoom', label: '重置缩放' },
-        { role: 'zoomIn', label: '放大' },
-        { role: 'zoomOut', label: '缩小' },
-        { type: 'separator' },
-        { role: 'togglefullscreen', label: '全屏' },
-      ],
-    },
-    {
-      label: '帮助',
-      submenu: [
-        {
-          label: '访问网站',
-          click: () => shell.openExternal(SITE_URL),
-        },
-      ],
-    },
-  ]
-  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
-}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -63,6 +15,13 @@ function createWindow() {
     minHeight: 600,
     title: '北牖 NorthBooker',
     icon: path.join(__dirname, 'icon.png'),
+    frame: false,
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    titleBarOverlay: process.platform === 'win32' ? {
+      color: '#1a1b1d',
+      symbolColor: '#f3f4f6',
+      height: 36,
+    } : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -86,9 +45,86 @@ function createWindow() {
   })
 }
 
+// 窗口控制 IPC
+ipcMain.handle('window-minimize', () => mainWindow?.minimize())
+ipcMain.handle('window-maximize', () => {
+  if (mainWindow?.isMaximized()) {
+    mainWindow.unmaximize()
+  } else {
+    mainWindow?.maximize()
+  }
+  return mainWindow?.isMaximized()
+})
+ipcMain.handle('window-close', () => mainWindow?.close())
+ipcMain.handle('window-is-maximized', () => mainWindow?.isMaximized())
+
+// 监听窗口最大化状态变化
+function setupMaximizeListener() {
+  if (!mainWindow) return
+  mainWindow.on('maximize', () => {
+    mainWindow?.webContents.send('window-state-change', true)
+  })
+  mainWindow.on('unmaximize', () => {
+    mainWindow?.webContents.send('window-state-change', false)
+  })
+}
+
+// 自动更新（GitHub Releases）
+function setupAutoUpdater() {
+  autoUpdater.autoDownload = false
+  autoUpdater.autoInstallOnAppQuit = true
+
+  autoUpdater.on('update-available', (info) => {
+    mainWindow?.webContents.send('update-available', info)
+  })
+
+  autoUpdater.on('update-not-available', () => {
+    mainWindow?.webContents.send('update-not-available')
+  })
+
+  autoUpdater.on('download-progress', (progress) => {
+    mainWindow?.webContents.send('update-progress', progress.percent)
+  })
+
+  autoUpdater.on('update-downloaded', () => {
+    mainWindow?.webContents.send('update-downloaded')
+  })
+
+  autoUpdater.on('error', (err) => {
+    mainWindow?.webContents.send('update-error', err.message)
+  })
+}
+
+// 检查更新（IPC 触发）
+ipcMain.handle('check-update', async () => {
+  try {
+    const result = await autoUpdater.checkForUpdates()
+    return { updateAvailable: !!result?.updateInfo }
+  } catch (err) {
+    return { error: err.message }
+  }
+})
+
+ipcMain.handle('download-update', () => {
+  autoUpdater.downloadUpdate()
+})
+
+ipcMain.handle('install-update', () => {
+  autoUpdater.quitAndInstall()
+})
+
+// 移除系统菜单栏
+Menu.setApplicationMenu(null)
+
 app.whenReady().then(() => {
-  createMenu()
   createWindow()
+  setupMaximizeListener()
+  setupAutoUpdater()
+
+  // 启动后自动检查更新
+  setTimeout(() => {
+    autoUpdater.checkForUpdatesAndNotify().catch(() => {})
+  }, 5000)
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
@@ -99,7 +135,6 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
-// IPC: 获取当前站点 URL
+// IPC: 获取当前站点 URL 和平台
 ipcMain.handle('get-site-url', () => SITE_URL)
-
-// 触发构建用标记
+ipcMain.handle('get-platform', () => process.platform)

@@ -20,6 +20,7 @@ interface PageNode {
 export default function Pages() {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
+  const login = useAuthStore((s) => s.login)
   const [tree, setTree] = useState<PageNode[]>([])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'all' | 'my'>('all')
@@ -37,9 +38,18 @@ export default function Pages() {
   }, [load])
 
   const handleCreate = async () => {
-    if (!user) return
-    const { id } = await createPage({ title: '无标题文档' })
-    navigate(`/pages/${id}`)
+    if (!user) {
+      login()
+      return
+    }
+    try {
+      const { id } = await createPage({ title: '无标题文档' })
+      navigate(`/pages/${id}`)
+    } catch (err: any) {
+      if (err?.response?.status === 401) {
+        login()
+      }
+    }
   }
 
   const handleDelete = async (id: string) => {

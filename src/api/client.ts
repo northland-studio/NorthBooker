@@ -22,9 +22,14 @@ client.interceptors.response.use(
   (res) => res,
   (error) => {
     if (error.response?.status === 401) {
-      // token 失效，清理本地登录态
+      // token 失效，清理本地登录态并跳转登录
       localStorage.removeItem('nb_token')
       localStorage.removeItem('nb_user')
+      // 非登录/回调类的请求才跳转（避免死循环）
+      const url = error.config?.url ?? ''
+      if (!url.includes('/auth/') && !url.includes('/callback')) {
+        window.location.href = '/api/auth/login?redirect=' + encodeURIComponent(window.location.pathname)
+      }
     }
     return Promise.reject(error)
   },
