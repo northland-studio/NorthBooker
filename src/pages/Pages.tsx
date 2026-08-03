@@ -8,8 +8,11 @@ interface PageNode {
   title: string
   parentId: string | null
   sortOrder: number
-  updatedAt: string
+  visibility: string
+  authorId: number
   authorName: string
+  createdAt: string
+  updatedAt: string
   children: PageNode[]
 }
 
@@ -19,14 +22,15 @@ export default function Pages() {
   const user = useAuthStore((s) => s.user)
   const [tree, setTree] = useState<PageNode[]>([])
   const [loading, setLoading] = useState(true)
+  const [tab, setTab] = useState<'all' | 'my'>('all')
 
   const load = useCallback(() => {
     setLoading(true)
-    fetchPageTree()
+    fetchPageTree(tab === 'my')
       .then(setTree)
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [])
+  }, [tab])
 
   useEffect(() => {
     load()
@@ -46,6 +50,11 @@ export default function Pages() {
 
   const formatDate = (s: string) => new Date(s).toLocaleDateString('zh-CN')
 
+  const canDelete = (node: PageNode) => {
+    if (!user) return false
+    return node.authorId === user.id || (user.level ?? 0) >= 1
+  }
+
   const renderNode = (node: PageNode, depth: number) => (
     <li key={node.id} className="page-tree-item" style={{ paddingLeft: `${depth * 16}px` }}>
       <div className="page-tree-row">
@@ -58,9 +67,12 @@ export default function Pages() {
         </Link>
         <span className="page-tree-meta">
           <span>{node.authorName}</span>
-          <span>{formatDate(node.updatedAt)}</span>
+          <span className={`page-vis-badge ${node.visibility === 'public' ? 'vis-public' : 'vis-private'}`}>
+            {node.visibility === 'public' ? '公开' : '私有'}
+          </span>
+          <span>{formatDate(node.createdAt || node.updatedAt)}</span>
         </span>
-        {user && (
+        {canDelete(node) && (
           <button className="page-tree-del" onClick={() => handleDelete(node.id)} title="删除">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -97,11 +109,25 @@ export default function Pages() {
         )}
       </div>
 
+      {/* 标签切换 */}
+      <div className="pages-tabs">
+        <button className={`pages-tab ${tab === 'all' ? 'pages-tab--active' : ''}`} onClick={() => setTab('all')}>
+          全部文档
+        </button>
+        {user && (
+          <button className={`pages-tab ${tab === 'my' ? 'pages-tab--active' : ''}`} onClick={() => setTab('my')}>
+            我的文档
+          </button>
+        )}
+      </div>
+
       {loading ? (
         <div className="pages-status">加载中...</div>
       ) : tree.length === 0 ? (
         <div className="pages-status">
-          <p>暂无文档</p>
+          <p>
+            {tab === 'my' ? '你还没有创建文档' : '暂无公开文档'}
+          </p>
           {user && (
             <button className="btn-primary" onClick={handleCreate}>
               创建第一篇文档

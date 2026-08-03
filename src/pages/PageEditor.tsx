@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
@@ -19,6 +19,12 @@ import { useAuthStore } from '@/store/auth'
 import { useThemeStore } from '@/store/theme'
 import { formatDate } from '@/utils/fileType'
 
+interface TocItem {
+  level: number
+  text: string
+  id: string
+}
+
 // 在线文档编辑器
 export default function PageEditor() {
   const { id } = useParams<{ id: string }>()
@@ -27,11 +33,16 @@ export default function PageEditor() {
   const theme = useThemeStore((s) => s.theme)
   const [title, setTitle] = useState('')
   const [authorName, setAuthorName] = useState('')
+  const [authorId, setAuthorId] = useState<number>(0)
   const [authorAvatar, setAuthorAvatar] = useState<string | null>(null)
+  const [visibility, setVisibility] = useState('private')
+  const [createdAt, setCreatedAt] = useState('')
   const [updatedAt, setUpdatedAt] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [toc, setToc] = useState<TocItem[]>([])
+  const [showToc, setShowToc] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout>>()
 
   const editor = useEditor({
@@ -39,7 +50,7 @@ export default function PageEditor() {
       StarterKit.configure({
         heading: { levels: [1, 2, 3] },
       }),
-      Placeholder.configure({ placeholder: '输入内容... 使用 / 唤起快捷菜单' }),
+      Placeholder.configure({ placeholder: '输入内容...' }),
       Underline,
       LinkExtension.configure({ openOnClick: false }),
       Highlight,
@@ -52,8 +63,20 @@ export default function PageEditor() {
       TableCell,
       TableHeader,
     ],
-    onUpdate: () => {
+    onUpdate: ({ editor: ed }) => {
       scheduleSave()
+      // 更新目录
+      const items: TocItem[] = []
+      ed.state.doc.descendants((node) => {
+        if (node.type.name === 'heading') {
+          items.push({
+            level: node.attrs.level,
+            text: node.textContent,
+            id: `toc-h-${items.length}`,
+          })
+        }
+      })
+      setToc(items)
     },
     editorProps: {
       attributes: {
@@ -62,13 +85,27 @@ export default function PageEditor() {
     },
   })
 
+  // 判断是否有编辑权限
+  const canEdit = useMemo(() => {
+    if (!user) return false
+    if ((user.level ?? 0) >= 1) return true
+    if (authorId > 0 && user.id === authorId) return true
+    return false
+  }, [user, authorId])
+
+  // 判断是否为作者（用于显示可见性开关）
+  const isAuthor = useMemo(() => {
+    if (!user) return false
+    return authorId > 0 && user.id === authorId
+  }, [user, authorId])
+
   const scheduleSave = useCallback(() => {
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => doSave(), 1500)
   }, [])
 
   const doSave = useCallback(async () => {
-    if (!id || !editor) return
+    if (!id || !editor || !canEdit) return
     setSaving(true)
     try {
       await updatePage(id, {
@@ -80,14 +117,14 @@ export default function PageEditor() {
     } finally {
       setSaving(false)
     }
-  }, [id, editor, title])
+  }, [id, editor, title, canEdit])
 
-  // 手动保存 (Ctrl+S)
+  // Ctrl+S 手动保存
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault()
-        if (id && editor) {
+        if (id && editor && canEdit) {
           clearTimeout(saveTimer.current)
           setSaving(true)
           updatePage(id, {
@@ -101,9 +138,9 @@ export default function PageEditor() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [id, editor, title])
+  }, [id, editor, title, canEdit])
 
-  // 加载页面数据
+  // 加载页面
   useEffect(() => {
     if (!id) return
     setLoading(true)
@@ -111,9 +148,12 @@ export default function PageEditor() {
     fetchPage(id)
       .then((page) => {
         setTitle(page.title)
-        setAuthorName(page.authorName)
-        setAuthorAvatar(page.authorAvatar)
-        setUpdatedAt(page.updatedAt)
+        setAuthorName(page.authorName || page.author_name)
+        setAuthorId(page.authorId ?? page.author_id)
+        setAuthorAvatar(page.authorAvatar || page.author_avatar)
+        setVisibility(page.visibility ?? 'private')
+        setCreatedAt(page.createdAt ?? page.created_at)
+        setUpdatedAt(page.updatedAt ?? page.updated_at)
         if (editor) {
           editor.commands.setContent(page.content || '')
         }
@@ -125,10 +165,19 @@ export default function PageEditor() {
       })
   }, [id, editor])
 
-  // 标题变更时自动保存
   const handleTitleChange = (val: string) => {
     setTitle(val)
     scheduleSave()
+  }
+
+  const toggleVisibility = async () => {
+    const newVis = visibility === 'public' ? 'private' : 'public'
+    setVisibility(newVis)
+    try {
+      await updatePage(id!, { visibility: newVis })
+    } catch {
+      setVisibility(visibility)
+    }
   }
 
   if (error) {
@@ -136,7 +185,7 @@ export default function PageEditor() {
       <div className="viewer-status-wrap">
         <div className="viewer-status-card">
           <h2>文档不存在</h2>
-          <p>该文档可能已被删除</p>
+          <p>该文档可能已被删除或无权查看</p>
           <button className="btn-primary" onClick={() => navigate('/pages')}>
             返回列表
           </button>
@@ -148,8 +197,6 @@ export default function PageEditor() {
   if (loading || !editor) {
     return <div className="viewer-status">加载中...</div>
   }
-
-  const canEdit = !user ? false : true // 公开阅读，登录可编辑
 
   return (
     <div className="page-editor-page">
@@ -166,15 +213,75 @@ export default function PageEditor() {
             <img className="page-editor-avatar" src={authorAvatar} alt={authorName} />
           )}
           <span className="page-editor-author">{authorName}</span>
-          <span className="page-editor-time">{formatDate(updatedAt)}</span>
+          {createdAt && (
+            <span className="page-editor-time">创建于 {formatDate(createdAt)}</span>
+          )}
+          <span className="page-editor-time">更新于 {formatDate(updatedAt)}</span>
           {saving && <span className="page-editor-saving">保存中...</span>}
         </div>
+
+        {/* 可见性切换（仅作者可见） */}
+        {isAuthor && (
+          <button className={`pe-vis-toggle ${visibility === 'public' ? 'pe-vis-public' : ''}`} onClick={toggleVisibility} title="切换可见性">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              {visibility === 'public' ? (
+                <>
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </>
+              ) : (
+                <>
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                  <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                  <line x1="1" y1="1" x2="23" y2="23" />
+                </>
+              )}
+            </svg>
+            {visibility === 'public' ? '公开' : '私有'}
+          </button>
+        )}
+
+        {/* 目录按钮 */}
+        <button
+          className={`pe-btn pe-toc-btn ${showToc ? 'pe-btn--active' : ''}`}
+          onClick={() => setShowToc(!showToc)}
+          title="目录"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="8" y1="6" x2="21" y2="6" />
+            <line x1="8" y1="12" x2="21" y2="12" />
+            <line x1="8" y1="18" x2="21" y2="18" />
+            <line x1="3" y1="6" x2="3.01" y2="6" />
+            <line x1="3" y1="12" x2="3.01" y2="12" />
+            <line x1="3" y1="18" x2="3.01" y2="18" />
+          </svg>
+        </button>
+
         {canEdit && (
           <PageEditorMenu editor={editor} />
         )}
       </div>
 
       <div className={`page-editor-body ${theme === 'dark' ? 'page-editor-body--dark' : ''}`}>
+        {showToc && toc.length > 0 && (
+          <aside className="page-editor-toc">
+            <div className="toc-title">目录</div>
+            {toc.map((item, i) => (
+              <a
+                key={i}
+                className={`toc-item toc-item--h${item.level}`}
+                onClick={() => {
+                  const el = document.querySelector(
+                    `.page-editor-main h${item.level}:nth-of-type(${toc.slice(0, i + 1).filter((t) => t.level === item.level).length})`,
+                  )
+                  el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                }}
+              >
+                {item.text}
+              </a>
+            ))}
+          </aside>
+        )}
         <div className="page-editor-main">
           <input
             className="page-editor-title-input"
@@ -210,6 +317,10 @@ function PageEditorMenu({ editor }: { editor: ReturnType<typeof useEditor> }) {
 
   const addTable = () => {
     editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()
+  }
+
+  const deleteTable = () => {
+    editor.chain().focus().deleteTable().run()
   }
 
   const addLink = () => {
@@ -263,8 +374,11 @@ function PageEditorMenu({ editor }: { editor: ReturnType<typeof useEditor> }) {
       {btn(() => editor.chain().focus().toggleCodeBlock().run(), editor.isActive('codeBlock'), '代码块',
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
       )}
-      {btn(addTable, editor.isActive('table'), '表格',
+      {btn(addTable, editor.isActive('table'), '插入表格',
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/><line x1="15" y1="3" x2="15" y2="21"/></svg>
+      )}
+      {editor.isActive('table') && btn(deleteTable, false, '删除表格',
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       )}
       {btn(addLink, editor.isActive('link'), '链接',
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>

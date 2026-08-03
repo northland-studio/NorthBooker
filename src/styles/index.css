@@ -1619,7 +1619,34 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
+}
+
+.pages-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.pages-tab {
+  padding: 8px 16px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pages-tab:hover {
+  color: var(--color-text);
+}
+
+.pages-tab--active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
 }
 
 .pages-header h2 {
@@ -1710,6 +1737,23 @@ button {
   flex-shrink: 0;
 }
 
+.page-vis-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.page-vis-badge.vis-public {
+  background: rgba(34, 197, 94, 0.12);
+  color: var(--color-success);
+}
+
+.page-vis-badge.vis-private {
+  background: rgba(156, 163, 175, 0.15);
+  color: var(--color-text-muted);
+}
+
 .page-tree-del {
   display: flex;
   align-items: center;
@@ -1795,10 +1839,82 @@ button {
   min-height: 0;
   overflow-y: auto;
   background: var(--color-card);
+  display: flex;
 }
 
 .page-editor-body--dark {
   background: var(--color-bg);
+}
+
+/* TOC 目录侧边栏 */
+.page-editor-toc {
+  width: 200px;
+  flex-shrink: 0;
+  padding: 24px 16px;
+  border-right: 1px solid var(--color-border);
+  background: var(--color-card);
+  overflow-y: auto;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+}
+
+.toc-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+}
+
+.toc-item {
+  display: block;
+  padding: 4px 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.15s;
+  line-height: 1.5;
+}
+
+.toc-item:hover {
+  color: var(--color-primary);
+}
+
+.toc-item--h1 { padding-left: 0; font-weight: 600; }
+.toc-item--h2 { padding-left: 12px; }
+.toc-item--h3 { padding-left: 24px; }
+
+/* 可见性切换按钮 */
+.pe-vis-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.pe-vis-toggle:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.pe-vis-toggle.pe-vis-public {
+  border-color: var(--color-success);
+  color: var(--color-success);
+  background: rgba(34, 197, 94, 0.06);
 }
 
 .page-editor-main {

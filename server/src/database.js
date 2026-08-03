@@ -60,6 +60,7 @@ db.exec(`
     parent_id TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0,
     author_id INTEGER NOT NULL,
+    visibility TEXT NOT NULL DEFAULT 'private',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     FOREIGN KEY (parent_id) REFERENCES pages(id) ON DELETE SET NULL,

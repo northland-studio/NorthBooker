@@ -1,8 +1,10 @@
 import client from './client'
 
-// 获取页面树
-export async function fetchPageTree() {
-  const { data } = await client.get('/pages/tree')
+// 获取页面树（?my=1 只看自己的）
+export async function fetchPageTree(myOnly?: boolean) {
+  const { data } = await client.get('/pages/tree', {
+    params: myOnly ? { my: '1' } : {},
+  })
   return data
 }
 
@@ -19,7 +21,10 @@ export async function createPage(body: { title: string; parentId?: string; conte
 }
 
 // 更新页面
-export async function updatePage(id: string, body: { title?: string; content?: string; parentId?: string }) {
+export async function updatePage(
+  id: string,
+  body: { title?: string; content?: string; parentId?: string; visibility?: string },
+) {
   const { data } = await client.put(`/pages/${id}`, body)
   return data
 }
