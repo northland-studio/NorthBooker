@@ -18,15 +18,21 @@ const FILTERS: { value: FilterType; label: string }[] = [
 export default function Documents() {
   const [docs, setDocs] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
   const [keyword, setKeyword] = useState('')
   const [filter, setFilter] = useState<FilterType>('all')
   const [sort, setSort] = useState<'updated' | 'title'>('updated')
 
   useEffect(() => {
-    fetchDocuments().then((d) => {
-      setDocs(d)
-      setLoading(false)
-    })
+    fetchDocuments()
+      .then((d) => {
+        setDocs(d)
+        setLoading(false)
+      })
+      .catch(() => {
+        setError(true)
+        setLoading(false)
+      })
   }, [])
 
   const filtered = useMemo(() => {
@@ -72,6 +78,8 @@ export default function Documents() {
 
       {loading ? (
         <div className="documents-status">加载中...</div>
+      ) : error ? (
+        <div className="documents-status">文档加载失败，请稍后重试</div>
       ) : filtered.length === 0 ? (
         <div className="documents-status">未找到匹配的文档</div>
       ) : (
