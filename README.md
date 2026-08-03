@@ -1,15 +1,27 @@
+<div align="center">
+  <img src="./icon.png" width="200" height="200" alt="北牖 NorthBooker">
+</div>
+
+<div align="center">
+
 # 北牖 NorthBooker
 
-![icon](./icon.png)
-
-> 云端文档查看网站 · 由北域工作室开发
+云端文档查看网站 · 由北域工作室开发
 
 ![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-5-646CFF?logo=vite&logoColor=white)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.6-3178C6?logo=typescript&logoColor=white)
 ![Node.js](https://img.shields.io/badge/Node.js-%3E%3D18-339933?logo=node.js&logoColor=white)
+![Express](https://img.shields.io/badge/Express-4.21-000000?logo=express&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white)
+![OAuth](https://img.shields.io/badge/OAuth-2.0-4A90D9)
 ![License](https://img.shields.io/badge/License-MIT-blue)
+
+![发布单位](https://img.shields.io/badge/发布单位-北域工作室-004AAD)
+![主题](https://img.shields.io/badge/主题-明暗双主题-004AAD)
+![状态](https://img.shields.io/badge/状态-开发中-orange)
+
+</div>
 
 ---
 
@@ -17,7 +29,7 @@
 
 北牖（NorthBooker）是一个基于云端的文档查看网站，提供多格式文档在线预览、文档管理与分享能力。前端基于 React 与 doc-preview 渲染引擎，认证体系通过 OAuth 2.0 对接玄剑官网（xuanjian.top）单点登录，并沿用其分级权限模型。
 
-- 开发单位：北域工作室
+- 开发单位：北域工作室（Northland Studio）
 - 前端：React 18 + Vite 5 + TypeScript
 - 后端：Node.js + Express + SQLite
 - 文档渲染：@doc-preview/react
@@ -28,10 +40,10 @@
 ## 功能特性
 
 - 多格式文档在线预览：PDF、DOCX、图片、Office、文本、Markdown 等
-- 文档管理：上传、分类、可见性控制、分享链接
-- 单点登录：使用玄剑官网账号 OAuth 登录
-- 分级权限：基于玄剑用户等级（level 0-3）控制访问
-- 管理后台：文档管理、用户管理、统计概览
+- 文档管理：拖拽上传、重命名、可见性控制、删除
+- 单点登录：使用玄剑官网账号 OAuth 登录，无需另行注册
+- 分级权限：基于玄剑用户等级（level 0-3）控制访问与后台管理
+- 管理后台：统计概览、文档管理、用户管理
 - 明暗双主题：亮色（白 + #004AAD）/ 暗色（#1A1B1D + #004AAD）
 - 响应式布局，适配桌面与移动端
 
@@ -49,8 +61,9 @@
 | 请求库 | Axios |
 | 文档渲染 | @doc-preview/react |
 | 后端 | Node.js + Express |
-| 数据库 | SQLite |
-| 认证 | OAuth 2.0 + JWT |
+| 数据库 | SQLite (better-sqlite3) |
+| 文件上传 | Multer |
+| 认证 | OAuth 2.0（玄剑官网签发 access_token） |
 
 ---
 
@@ -58,26 +71,36 @@
 
 ```
 northbooker/
-├── src/                    # 前端源码
-│   ├── api/                # 接口请求封装
-│   ├── components/         # 通用组件
-│   ├── hooks/              # 自定义 Hooks
-│   ├── pages/              # 页面组件
-│   ├── store/              # 状态管理
-│   ├── styles/             # 全局样式
-│   ├── types/              # 类型定义
-│   ├── utils/              # 工具函数
-│   ├── App.tsx             # 根组件与路由
-│   ├── main.tsx            # 应用入口
-│   └── vite-env.d.ts       # 环境变量类型
-├── server/                 # 后端服务（批次4起）
-├── public/                 # 静态资源
-├── index.html              # HTML 入口
-├── vite.config.ts          # Vite 配置
-├── tsconfig.json           # TypeScript 配置
-├── eslint.config.js        # ESLint 配置
-├── .prettierrc             # Prettier 配置
-└── package.json            # 依赖与脚本
+├── src/                       # 前端源码
+│   ├── api/                   # 接口请求封装（axios client、documents、auth、admin、uploads）
+│   ├── components/            # 通用组件（Layout、Navbar、UserMenu、UploadDialog、RequireLevel 等）
+│   ├── pages/                 # 页面（Documents、Viewer、Admin、AuthCallback）
+│   ├── store/                 # 状态管理（theme、auth）
+│   ├── styles/                # 全局样式
+│   ├── types/                 # 类型定义（document、user）
+│   ├── utils/                 # 工具函数（fileType）
+│   ├── App.tsx                # 根组件与路由
+│   ├── main.tsx               # 应用入口
+│   └── vite-env.d.ts          # 环境变量类型
+├── server/                    # 后端服务
+│   ├── src/
+│   │   ├── middleware/        # 认证与权限中间件（auth/admin/superAdmin/optional）
+│   │   ├── routes/            # 路由（documents、auth、admin、uploads）
+│   │   ├── utils/             # 后端工具（fileType）
+│   │   ├── app.js             # Express 应用
+│   │   ├── database.js        # SQLite 初始化与示例数据
+│   │   ├── index.js           # 服务入口
+│   │   └── oauth.js           # 玄剑 OAuth 配置与 token 校验缓存
+│   ├── data/                  # 数据库与上传文件目录
+│   └── .env.example
+├── public/                    # 前端静态资源与示例文档
+├── scripts/                   # 构建辅助脚本（doc-preview 补丁）
+├── index.html                 # HTML 入口
+├── vite.config.ts             # Vite 配置（含 doc-preview worker 修复）
+├── tsconfig.json              # TypeScript 配置
+├── eslint.config.js           # ESLint 配置
+├── .prettierrc                # Prettier 配置
+└── package.json               # 依赖与脚本
 ```
 
 ---
@@ -86,23 +109,33 @@ northbooker/
 
 ### 环境要求
 
-- Node.js >= 18
+- Node.js >= 18（需内置全局 fetch）
 - npm >= 9
 
 ### 安装与开发
 
 ```bash
-# 安装依赖
+# 1. 安装前端依赖
 npm install
 
-# 启动前端开发服务器（默认 5173 端口）
-npm run dev
-
-# 启动后端服务（批次4起，默认 3000 端口）
+# 2. 安装后端依赖
 cd server
 npm install
+cd ..
+
+# 3. 配置后端环境变量
+cp server/.env.example server/.env
+# 编辑 server/.env，填写 OAUTH_CLIENT_SECRET 等
+
+# 4. 启动后端服务（默认 3000 端口）
+cd server
+npm run dev
+
+# 5. 启动前端开发服务器（新终端，默认 5173 端口）
 npm run dev
 ```
+
+前端开发服务器已配置代理，`/api` 与 `/uploads` 请求会自动转发到 `http://localhost:3000`。
 
 ### 构建与预览
 
@@ -117,28 +150,39 @@ npm run preview
 ### 代码检查
 
 ```bash
-# ESLint 检查
-npm run lint
-
-# 格式化代码
-npm run format
+npm run lint     # ESLint 检查
+npm run format   # Prettier 格式化
 ```
 
 ---
 
 ## 环境变量
 
-复制 `.env.example` 为 `.env` 并按需修改：
+### 前端
+
+前端仅需配置 API 基础地址，OAuth 敏感信息全部由后端处理：
 
 ```bash
-# 前端（Vite，需 VITE_ 前缀）
-VITE_OAUTH_PROVIDER_URL=https://www.xuanjian.top
-VITE_OAUTH_CLIENT_ID=northbooker
-VITE_OAUTH_REDIRECT_URI=https://northbooker.xuanjian.top/callback
+# .env（Vite，需 VITE_ 前缀）
 VITE_API_BASE_URL=/api
 ```
 
-后端环境变量位于 `server/.env`，详见后端目录说明。
+### 后端
+
+后端环境变量位于 `server/.env`，参考 `server/.env.example`：
+
+```bash
+PORT=3000
+JWT_SECRET=change_me_in_production
+
+# 玄剑官网 OAuth
+OAUTH_PROVIDER_URL=https://www.xuanjian.top
+OAUTH_CLIENT_ID=northbooker
+OAUTH_CLIENT_SECRET=              # 由玄剑官网注册分配
+OAUTH_REDIRECT_URI=https://northbooker.xuanjian.top/api/auth/callback
+```
+
+> 开发环境下可将 `OAUTH_REDIRECT_URI` 设为 `http://localhost:5173/api/auth/callback`，并确保玄剑官网注册的 redirect_uri 允许该地址。
 
 ---
 
@@ -149,44 +193,54 @@ VITE_API_BASE_URL=/api
 ### 授权流程
 
 ```
-北牖前端 ──1. 跳转授权──> 玄剑官网 /api/oauth/authorize
-                              │
-                          2. 用户登录并同意授权
-                              │
-北牖回调 <──3. 回调带 code──── 玄剑官网
+北牖前端 ──1. GET /api/auth/login──> 北牖后端 ──302──> 玄剑 /api/oauth/authorize
+                                                                │
+                                                          2. 用户登录并同意授权
+                                                                │
+北牖后端 <──3. 回调带 code──────────────────────── 玄剑官网
    │
-   └──4. 后端用 code 换 access_token ──> /api/oauth/token
-   └──5. 用 token 获取用户信息 ───────> /api/oauth/userinfo
-   └──6. 签发北牖本地会话
+   ├──4. POST /api/oauth/token 换 access_token ──> 玄剑
+   ├──5. GET /api/oauth/verify 校验并获取用户信息 ──> 玄剑
+   └──6. 302 重定向到前端 /callback#access_token=xxx
+          前端写入 localStorage，调用 /api/auth/me 拉取本地用户
 ```
 
-### OAuth 端点
+### 玄剑 OAuth 端点
 
 | 端点 | 方法 | 说明 |
 |:---|:---|:---|
 | `/api/oauth/authorize` | GET | 授权确认页 |
 | `/api/oauth/authorize` | POST | 生成授权码（5 分钟有效） |
 | `/api/oauth/token` | POST | 授权码换访问令牌（7 天有效） |
-| `/api/oauth/verify` | GET | 校验访问令牌 |
-| `/api/oauth/userinfo` | GET | 获取用户信息 |
+| `/api/oauth/verify` | GET | 校验访问令牌并返回用户信息 |
+| `/api/oauth/userinfo` | GET | 获取用户详细信息 |
+
+### 北牖后端认证接口
+
+| 接口 | 方法 | 说明 |
+|:---|:---|:---|
+| `/api/auth/login` | GET | 跳转玄剑授权页（带 state 防 CSRF） |
+| `/api/auth/callback` | GET | 授权回调，用 code 换 token 后重定向前端 |
+| `/api/auth/me` | GET | 返回当前登录用户（需 Bearer token） |
+| `/api/auth/logout` | POST | 登出并清除后端 token 缓存 |
 
 ### 权限等级体系
 
-北牖沿用玄剑官网的用户等级模型，用于控制管理后台访问：
+北牖沿用玄剑官网的用户等级模型，用于控制管理后台与文档管理访问：
 
 | level | 含义 | 能力 |
 |:---:|:---|:---|
-| 0 | 普通用户 | 查看文档 |
-| 1 | 管理员 | 进入管理后台、管理文档与用户 |
+| 0 | 普通用户 | 查看公开文档 |
+| 1 | 管理员 | 进入管理后台、上传/管理文档、查看用户列表 |
 | 2 | 超级管理员 | 管理员全部权限 + 调整用户等级 |
 | 3 | 最高级 | 全部权限 |
 
 ### OAuth 客户端配置
 
-- client_id：`northbooker`
-- redirect_uri：`https://northbooker.xuanjian.top/callback`
-
-> 说明：玄剑官网当前未启用 client_secret 校验与客户端白名单，client_id 为约定值。生产环境建议推动玄剑方补齐白名单与密钥校验。
+- client_id：`northbooker`（自定）
+- redirect_uri：`https://northbooker.xuanjian.top/api/auth/callback`
+- token 校验：北牖后端调用玄剑 `/api/oauth/verify` 校验，结果缓存 60 秒以减少远程调用
+- 用户同步：首次校验通过后，用户信息会同步到北牖本地 `users` 表（以 `xuanjian_id` 关联）
 
 ---
 
@@ -195,11 +249,30 @@ VITE_API_BASE_URL=/api
 | 路径 | 页面 | 权限 |
 |:---|:---|:---|
 | `/` | 文档列表 | 公开 |
-| `/viewer/:id` | 文档查看 | 公开/登录 |
-| `/login` | 登录（跳转玄剑 OAuth） | 公开 |
-| `/callback` | OAuth 回调 | 公开 |
-| `/admin` | 管理后台 | level >= 1 |
-| `/admin/users` | 用户管理 | level >= 2 |
+| `/viewer/:id` | 文档查看 | 公开 |
+| `/callback` | OAuth 回调处理 | 公开 |
+| `/admin` | 管理后台 | 需登录且 level >= 1 |
+
+---
+
+## 后端 API 一览
+
+| 接口 | 方法 | 权限 | 说明 |
+|:---|:---|:---|:---|
+| `/api/health` | GET | 公开 | 健康检查 |
+| `/api/documents` | GET | 公开 | 文档列表 |
+| `/api/documents/:id` | GET | 公开 | 单个文档 |
+| `/api/documents/:id` | PUT | level >= 1 | 编辑标题 |
+| `/api/auth/login` | GET | 公开 | 跳转授权 |
+| `/api/auth/callback` | GET | 公开 | 授权回调 |
+| `/api/auth/me` | GET | 登录 | 当前用户 |
+| `/api/auth/logout` | POST | 公开 | 登出 |
+| `/api/uploads` | POST | level >= 1 | 上传文档 |
+| `/api/admin/stats` | GET | level >= 1 | 统计信息 |
+| `/api/admin/documents` | GET | level >= 1 | 文档管理列表 |
+| `/api/admin/users` | GET | level >= 1 | 用户列表 |
+| `/api/admin/documents/:id/visibility` | PUT | level >= 1 | 切换可见性 |
+| `/api/admin/documents/:id` | DELETE | level >= 1 | 删除文档 |
 
 ---
 
@@ -217,7 +290,7 @@ VITE_API_BASE_URL=/api
 | 文档 | 文档更新 |
 | 部署 | 部署相关 |
 
-示例：`功能: 实现文档列表与搜索筛选`
+示例：`功能: OAuth 对接玄剑官网单点登录`
 
 ---
 
@@ -226,7 +299,8 @@ VITE_API_BASE_URL=/api
 - 前端：`npm run build` 产物部署至静态服务器或 CDN
 - 后端：Node.js 服务部署至服务器，反向代理指向 3000 端口
 - 域名：northbooker.xuanjian.top
-- 详细部署文档将在批次10补充
+- 文件传输：使用 scp 上传至服务器（不通过 git）
+- 详细部署配置见批次10
 
 ---
 
