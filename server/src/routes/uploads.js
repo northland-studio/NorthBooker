@@ -7,6 +7,7 @@ import { getFileType } from '../utils/fileType.js'
 import {
   getUploadToken,
   getCdnUrl,
+  getPrivateDownloadUrl,
   deleteFile,
   parseKeyFromUrl,
   QINIU_UPLOAD_URL,
@@ -66,7 +67,9 @@ router.post('/callback', (req, res) => {
   const docSize = typeof size === 'number' ? size : Number(size) || 0
   const updatedAt = new Date().toISOString()
   const id = crypto.randomBytes(8).toString('hex')
+  // 数据库存原始公开 URL（便于删除时解析 key），返回前端用私有签名 URL
   const uri = getCdnUrl(key)
+  const signedUri = getPrivateDownloadUrl(key)
 
   db.prepare(
     `INSERT INTO documents (id, title, file_name, uri, type, size, updated_at, owner_id, visibility)
@@ -77,7 +80,7 @@ router.post('/callback', (req, res) => {
     id,
     title: docTitle,
     fileName,
-    uri,
+    uri: signedUri,
     type,
     size: docSize,
     updatedAt,

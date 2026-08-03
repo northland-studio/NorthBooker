@@ -5,7 +5,7 @@ import qiniu from 'qiniu'
 const accessKey = process.env.QINIU_ACCESS_KEY || ''
 const secretKey = process.env.QINIU_SECRET_KEY || ''
 const bucket = process.env.QINIU_BUCKET || 'northbooker'
-const cdnDomain = (process.env.QINIU_CDN_DOMAIN || 'https://cdn.northbooker.xuanjian.top').replace(/\/$/, '')
+const cdnDomain = (process.env.QINIU_CDN_DOMAIN || 'http://cdn.northbooker.xuanjian.top').replace(/\/$/, '')
 
 const mac = new qiniu.auth.digest.Mac(accessKey, secretKey)
 
@@ -55,9 +55,34 @@ export function uploadBuffer(key, body, mimeType) {
   })
 }
 
-// 拼接 CDN 访问 URL
+// 拼接 CDN 访问 URL（公开空间用）
 export function getCdnUrl(key) {
   return `${cdnDomain}/${key}`
+}
+
+/**
+ * 生成私有空间时效性下载 URL（带 ?e=&token= 签名）
+ * @param {string} key 存储路径
+ * @param {number} [ttlSeconds=3600] 有效期（秒），默认 1 小时
+ * @returns {string} 私有签名下载 URL
+ */
+export function getPrivateDownloadUrl(key, ttlSeconds = 3600) {
+  const deadline = Math.floor(Date.now() / 1000) + ttlSeconds
+  return bucketManager.privateDownloadUrl(cdnDomain, key, deadline)
+}
+
+/**
+ * 对外暴露的文档 uri 进行私有签名
+ * - 七牛 CDN URL：解析 key 后生成时效性签名 URL
+ * - 非七牛 URL（如本地示例文档 /docs/sample.md）：原样返回
+ * @param {string} uri 原始 uri
+ * @param {number} [ttlSeconds] 有效期
+ */
+export function signPrivateUri(uri, ttlSeconds) {
+  if (typeof uri !== 'string' || !uri) return uri
+  const key = parseKeyFromUrl(uri)
+  if (!key) return uri
+  return getPrivateDownloadUrl(key, ttlSeconds)
 }
 
 // 从完整 URL 中解析出 key（用于删除）

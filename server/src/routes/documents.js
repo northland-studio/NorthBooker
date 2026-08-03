@@ -1,21 +1,22 @@
 import { Router } from 'express'
 import db from '../database.js'
 import { authMiddleware, adminMiddleware } from '../middleware/auth.js'
+import { signPrivateUri } from '../qiniu.js'
 
 const router = Router()
 
-// 数据库行转换为接口文档对象
+// 数据库行转换为接口文档对象（uri/thumbnail 转为私有空间时效性签名 URL）
 function toDoc(row) {
   if (!row) return null
   return {
     id: row.id,
     title: row.title,
     fileName: row.file_name,
-    uri: row.uri,
+    uri: signPrivateUri(row.uri),
     type: row.type,
     size: row.size,
     updatedAt: row.updated_at,
-    thumbnail: row.thumbnail,
+    thumbnail: signPrivateUri(row.thumbnail),
   }
 }
 

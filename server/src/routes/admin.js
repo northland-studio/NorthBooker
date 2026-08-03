@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import db from '../database.js'
 import { authMiddleware, adminMiddleware } from '../middleware/auth.js'
-import { deleteFile, parseKeyFromUrl } from '../qiniu.js'
+import { deleteFile, parseKeyFromUrl, signPrivateUri } from '../qiniu.js'
 
 const router = Router()
 
@@ -59,11 +59,11 @@ router.get('/documents', (req, res) => {
       id: r.id,
       title: r.title,
       fileName: r.file_name,
-      uri: r.uri,
+      uri: signPrivateUri(r.uri),
       type: r.type,
       size: r.size,
       updatedAt: r.updated_at,
-      thumbnail: r.thumbnail,
+      thumbnail: signPrivateUri(r.thumbnail),
       visibility: r.visibility,
       ownerId: r.owner_id,
       ownerName: r.owner_name,
