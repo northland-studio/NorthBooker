@@ -101,3 +101,5 @@ app.on('window-all-closed', () => {
 
 // IPC: 获取当前站点 URL
 ipcMain.handle('get-site-url', () => SITE_URL)
+
+// 触发构建用标记
