@@ -1,0 +1,87 @@
+/* 主题变量：亮色（白 + #004AAD） */
+:root {
+  --color-bg: #ffffff;
+  --color-text: #1a1b1d;
+  --color-text-muted: #6b7280;
+  --color-primary: #004aad;
+  --color-primary-hover: #003a8c;
+  --color-border: #e5e7eb;
+  --color-card: #f9fafb;
+}
+
+/* 主题变量：暗色（#1A1B1D + #004AAD） */
+:root.dark {
+  --color-bg: #1a1b1d;
+  --color-text: #f3f4f6;
+  --color-text-muted: #9ca3af;
+  --color-primary: #004aad;
+  --color-primary-hover: #2f6fd0;
+  --color-border: #2d2f33;
+  --color-card: #232528;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', Roboto, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  transition: background 0.3s, color 0.3s;
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+/* 首页占位样式 */
+.page-home {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  padding: 24px;
+}
+
+.page-home-logo {
+  width: 96px;
+  height: 96px;
+  border-radius: 20px;
+  box-shadow: 0 12px 40px rgba(0, 74, 173, 0.18);
+}
+
+.page-home h1 {
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--color-primary);
+  letter-spacing: 1px;
+}
+
+.page-home p {
+  color: var(--color-text-muted);
+  font-size: 15px;
+}
+
+.page-home-sub {
+  font-size: 13px !important;
+  opacity: 0.7;
+}
