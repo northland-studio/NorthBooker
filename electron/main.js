@@ -15,13 +15,6 @@ function createWindow() {
     minHeight: 600,
     title: '北牖 NorthBooker',
     icon: path.join(__dirname, 'icon.png'),
-    frame: false,
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
-    titleBarOverlay: process.platform === 'win32' ? {
-      color: '#1a1b1d',
-      symbolColor: '#f3f4f6',
-      height: 36,
-    } : undefined,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
