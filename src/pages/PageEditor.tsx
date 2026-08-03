@@ -44,6 +44,9 @@ export default function PageEditor() {
   const [toc, setToc] = useState<TocItem[]>([])
   const [showToc, setShowToc] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout>>()
+  // 用 ref 解决 useCallback 闭包陷阱：scheduleSave（空依赖）调用的 doSave 需要最新的 title
+  const titleRef = useRef(title)
+  titleRef.current = title
 
   const editor = useEditor({
     extensions: [
@@ -116,7 +119,7 @@ export default function PageEditor() {
     setSaving(true)
     try {
       await updatePage(id, {
-        title: title || '无标题文档',
+        title: titleRef.current || '无标题文档',
         content: editor.getHTML(),
       })
     } catch {
@@ -124,7 +127,7 @@ export default function PageEditor() {
     } finally {
       setSaving(false)
     }
-  }, [id, editor, title, canEdit])
+  }, [id, editor, canEdit])
 
   // Ctrl+S 手动保存
   useEffect(() => {
@@ -135,7 +138,7 @@ export default function PageEditor() {
           clearTimeout(saveTimer.current)
           setSaving(true)
           updatePage(id, {
-            title: title || '无标题文档',
+            title: titleRef.current || '无标题文档',
             content: editor.getHTML(),
           })
             .then(() => setSaving(false))
@@ -145,7 +148,7 @@ export default function PageEditor() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [id, editor, title, canEdit])
+  }, [id, editor, canEdit])
 
   // 加载页面
   useEffect(() => {

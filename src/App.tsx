@@ -7,6 +7,8 @@ import Admin from '@/pages/Admin'
 import AuthCallback from '@/pages/AuthCallback'
 import Pages from '@/pages/Pages'
 import PageEditor from '@/pages/PageEditor'
+import PageTerms from '@/pages/PageTerms'
+import PageDownload from '@/pages/PageDownload'
 
 export default function App() {
   return (
@@ -18,6 +20,8 @@ export default function App() {
         <Route path="/viewer/:id" element={<Viewer />} />
         <Route path="/pages" element={<Pages />} />
         <Route path="/pages/:id" element={<PageEditor />} />
+        <Route path="/terms" element={<PageTerms />} />
+        <Route path="/download" element={<PageDownload />} />
         {/* 管理后台：要求登录且 level >= 1 */}
         <Route
           path="/admin"

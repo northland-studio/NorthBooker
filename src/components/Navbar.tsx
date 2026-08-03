@@ -14,6 +14,8 @@ export default function Navbar() {
         </Link>
         <nav className="navbar-links">
           <Link to="/pages" className="navbar-link">在线文档</Link>
+          <Link to="/download" className="navbar-link">应用下载</Link>
+          <Link to="/terms" className="navbar-link">用户协议</Link>
         </nav>
       </div>
       <div className="navbar-actions">
