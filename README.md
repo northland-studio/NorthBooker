@@ -40,7 +40,7 @@
 ## 功能特性
 
 - 多格式文档在线预览：PDF、DOCX、图片、Office、文本、Markdown 等
-- 文档管理：拖拽上传、重命名、可见性控制、删除
+- 文档管理：拖拽上传（前端直传七牛，真实进度回调）、重命名、可见性控制、删除
 - 单点登录：使用玄剑官网账号 OAuth 登录，无需另行注册
 - 分级权限：基于玄剑用户等级（level 0-3）控制访问与后台管理
 - 管理后台：统计概览、文档管理、用户管理
@@ -62,7 +62,7 @@
 | 文档渲染 | @doc-preview/react |
 | 后端 | Node.js + Express |
 | 数据库 | SQLite (better-sqlite3) |
-| 文件上传 | Multer |
+| 对象存储 | 七牛云（东南亚 as0 区域，bucket: northbooker） |
 | 认证 | OAuth 2.0（玄剑官网签发 access_token） |
 
 ---
@@ -90,8 +90,9 @@ northbooker/
 │   │   ├── app.js             # Express 应用
 │   │   ├── database.js        # SQLite 初始化与示例数据
 │   │   ├── index.js           # 服务入口
-│   │   └── oauth.js           # 玄剑 OAuth 配置与 token 校验缓存
-│   ├── data/                  # 数据库与上传文件目录
+│   │   ├── oauth.js           # 玄剑 OAuth 配置与 token 校验缓存
+│   │   └── qiniu.js           # 七牛对象存储配置与上传/删除工具
+│   ├── data/                  # SQLite 数据库目录
 │   └── .env.example
 ├── public/                    # 前端静态资源与示例文档
 ├── scripts/                   # 构建辅助脚本（doc-preview 补丁）
@@ -180,6 +181,12 @@ OAUTH_PROVIDER_URL=https://www.xuanjian.top
 OAUTH_CLIENT_ID=northbooker
 OAUTH_CLIENT_SECRET=              # 由玄剑官网注册分配
 OAUTH_REDIRECT_URI=https://northbooker.xuanjian.top/api/auth/callback
+
+# 七牛对象存储（东南亚 as0 区域）
+QINIU_ACCESS_KEY=                 # 七牛 AccessKey
+QINIU_SECRET_KEY=                 # 七牛 SecretKey
+QINIU_BUCKET=northbooker
+QINIU_CDN_DOMAIN=https://cdn.northbooker.xuanjian.top
 ```
 
 > 开发环境下可将 `OAUTH_REDIRECT_URI` 设为 `http://localhost:5173/api/auth/callback`，并确保玄剑官网注册的 redirect_uri 允许该地址。
@@ -244,6 +251,28 @@ OAUTH_REDIRECT_URI=https://northbooker.xuanjian.top/api/auth/callback
 
 ---
 
+## 对象存储与上传流程
+
+文档文件存储于七牛云对象存储（bucket: `northbooker`，区域：东南亚 as0，CDN：`cdn.northbooker.xuanjian.top`）。采用**前端直传 + 后端回调**模式，文件不经后端中转，节省服务器带宽并获取真实上传进度。
+
+### 上传流程
+
+```
+前端 ──1. GET /api/uploads/token?fileName=xxx──> 后端（返回 uploadToken + key）
+  │
+  ├──2. XMLHttpRequest 直传 https://up-as0.qiniup.com（token/key/file）
+  │      └─ xhr.upload.onprogress 实时回调进度（0-100%）
+  │
+  └──3. POST /api/uploads/callback（key/fileName/size/hash）──> 后端记录文档
+```
+
+- 上传凭证由后端签发（1 小时有效），含 `returnBody` 返回 key/hash/fsize
+- 前端用 `XMLHttpRequest.upload.onprogress` 获取真实上传进度
+- 上传成功后前端回调后端，写入 `documents` 表，uri 为 CDN 完整地址
+- 管理后台删除文档时，后端同步调用七牛删除接口清理对象存储文件
+
+---
+
 ## 路由与页面
 
 | 路径 | 页面 | 权限 |
@@ -267,7 +296,9 @@ OAUTH_REDIRECT_URI=https://northbooker.xuanjian.top/api/auth/callback
 | `/api/auth/callback` | GET | 公开 | 授权回调 |
 | `/api/auth/me` | GET | 登录 | 当前用户 |
 | `/api/auth/logout` | POST | 公开 | 登出 |
-| `/api/uploads` | POST | level >= 1 | 上传文档 |
+| `/api/uploads/token` | GET | level >= 1 | 获取七牛上传凭证（前端直传） |
+| `/api/uploads/callback` | POST | level >= 1 | 上传完成后记录文档 |
+| `/api/uploads` | DELETE | level >= 1 | 删除七牛文件 |
 | `/api/admin/stats` | GET | level >= 1 | 统计信息 |
 | `/api/admin/documents` | GET | level >= 1 | 文档管理列表 |
 | `/api/admin/users` | GET | level >= 1 | 用户列表 |

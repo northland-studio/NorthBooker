@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import db from '../database.js'
 import { authMiddleware, adminMiddleware } from '../middleware/auth.js'
+import { deleteFile, parseKeyFromUrl } from '../qiniu.js'
 
 const router = Router()
 
@@ -81,10 +82,22 @@ router.put('/documents/:id/visibility', (req, res) => {
   res.json({ ok: true })
 })
 
-// 删除文档
-router.delete('/documents/:id', (req, res) => {
-  const result = db.prepare('DELETE FROM documents WHERE id = ?').run(req.params.id)
-  if (result.changes === 0) return res.status(404).json({ error: '文档不存在' })
+// 删除文档（同步删除七牛对象存储中的文件）
+router.delete('/documents/:id', async (req, res) => {
+  const row = db.prepare('SELECT uri FROM documents WHERE id = ?').get(req.params.id)
+  if (!row) return res.status(404).json({ error: '文档不存在' })
+
+  // 删除七牛文件（失败不阻断数据库删除，仅记日志）
+  const key = parseKeyFromUrl(row.uri)
+  if (key) {
+    try {
+      await deleteFile(key)
+    } catch (err) {
+      console.error('[北牖] 删除七牛文件失败:', err.message)
+    }
+  }
+
+  db.prepare('DELETE FROM documents WHERE id = ?').run(req.params.id)
   res.json({ ok: true })
 })
 

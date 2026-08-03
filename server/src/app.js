@@ -1,23 +1,17 @@
 import express from 'express'
 import cors from 'cors'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import documentsRouter from './routes/documents.js'
 import authRouter from './routes/auth.js'
 import adminRouter from './routes/admin.js'
 import uploadsRouter from './routes/uploads.js'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
 
 // 中间件
 app.use(cors())
 app.use(express.json())
 
-// 静态托管上传文件
-app.use('/uploads', express.static(path.resolve(__dirname, '../data/uploads')))
-
-// 路由
+// 路由（文件存储使用七牛对象存储，不再本地静态托管）
 app.use('/api/documents', documentsRouter)
 app.use('/api/auth', authRouter)
 app.use('/api/admin', adminRouter)

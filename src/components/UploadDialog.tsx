@@ -16,6 +16,7 @@ export default function UploadDialog({
   const [title, setTitle] = useState('')
   const [progress, setProgress] = useState(0)
   const [uploading, setUploading] = useState(false)
+  const [stage, setStage] = useState<'idle' | 'uploading' | 'recording'>('idle')
   const [error, setError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
 
@@ -40,8 +41,12 @@ export default function UploadDialog({
     setUploading(true)
     setError(null)
     setProgress(0)
+    setStage('uploading')
     try {
-      const doc = await uploadDocument(file, title, setProgress)
+      const doc = await uploadDocument(file, title, (p) => {
+        setProgress(p)
+        if (p >= 100) setStage('recording')
+      })
       onUploaded(doc)
       onClose()
     } catch (err: unknown) {
@@ -49,6 +54,7 @@ export default function UploadDialog({
       setError(e.response?.data?.error || '上传失败')
     } finally {
       setUploading(false)
+      setStage('idle')
     }
   }
 
@@ -119,7 +125,9 @@ export default function UploadDialog({
         {uploading && (
           <div className="upload-progress">
             <div className="upload-progress-bar" style={{ width: `${progress}%` }} />
-            <span className="upload-progress-text">{progress}%</span>
+            <span className="upload-progress-text">
+              {stage === 'recording' ? '记录中...' : `${progress}%`}
+            </span>
           </div>
         )}
 

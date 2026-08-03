@@ -24,11 +24,14 @@
   - authMiddleware + adminMiddleware 保护（level >= 1）
   - 前端 RequireLevel 路由守卫、Admin 页面（统计卡片 + 文档/用户管理表格）
 - **功能**：文档上传与详情管理
-  - 后端 multer 按月分目录上传，100MB 限制，需 level >= 1
+  - 七牛对象存储（bucket: northbooker，东南亚 as0 区域）
+  - 前端直传七牛 + 后端回调记录模式，100MB 限制，需 level >= 1
+  - XMLHttpRequest.upload.onprogress 真实上传进度回调
   - documents 路由增加 PUT 编辑标题接口
-  - 前端 UploadDialog（拖拽 / 选择 / 进度条）
+  - 前端 UploadDialog（拖拽 / 选择 / 进度条 / 记录中阶段提示）
   - 文档列表页集成上传按钮（管理员可见）
   - 管理后台文档表格增加重命名内联编辑
+  - 删除文档时同步清理七牛对象存储文件
 - **功能**：阅读体验增强
   - 查看页增加返回按钮、文档标题与元信息工具栏
   - 文档不存在状态独立卡片展示
@@ -51,6 +54,14 @@
 - client_id：`northbooker`
 - redirect_uri：`https://northbooker.xuanjian.top/api/auth/callback`
 - Provider：https://www.xuanjian.top
+
+### 对象存储配置
+
+- 服务商：七牛云
+- bucket：`northbooker`
+- 区域：东南亚（as0）
+- CDN 域名：`https://cdn.northbooker.xuanjian.top`
+- 上传模式：前端直传 + 后端回调（带真实进度）
 
 ### 已知限制
 
