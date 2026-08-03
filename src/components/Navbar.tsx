@@ -7,10 +7,15 @@ import iconPng from '@/../icon.png'
 export default function Navbar() {
   return (
     <header className="navbar">
-      <Link to="/" className="navbar-brand">
-        <img src={iconPng} alt="北牖" />
-        <span>北牖 NorthBooker</span>
-      </Link>
+      <div className="navbar-left">
+        <Link to="/" className="navbar-brand">
+          <img src={iconPng} alt="北牖" />
+          <span>北牖 NorthBooker</span>
+        </Link>
+        <nav className="navbar-links">
+          <Link to="/pages" className="navbar-link">在线文档</Link>
+        </nav>
+      </div>
       <div className="navbar-actions">
         <ThemeToggle />
         <UserMenu />
