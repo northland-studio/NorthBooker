@@ -39,3 +39,6 @@ Thumbs.db
 server/data/*.sqlite
 server/data/uploads/*
 !server/data/uploads/.gitkeep
+
+# 部署临时包
+deploy.tar.gz

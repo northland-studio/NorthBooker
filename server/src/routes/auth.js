@@ -5,15 +5,21 @@ import { authMiddleware } from '../middleware/auth.js'
 
 const router = Router()
 
-// state 临时存储（防 CSRF），有效期 10 分钟
-const states = new Map()
+// state 有效期 10 分钟（与 cookie maxAge 一致）
 const STATE_TTL = 10 * 60 * 1000
-setInterval(() => {
-  const now = Date.now()
-  for (const [k, v] of states) {
-    if (v.expiresAt < now) states.delete(k)
-  }
-}, 5 * 60 * 1000)
+
+// OAuth state cookie 名称
+const STATE_COOKIE = 'oauth_state'
+const REDIRECT_COOKIE = 'oauth_redirect'
+
+// state cookie 配置：httpOnly 防 XSS、secure 仅 HTTPS 传输、sameSite=lax 允许顶级导航回调携带
+const stateCookieOptions = {
+  httpOnly: true,
+  secure: true,
+  sameSite: 'lax',
+  maxAge: STATE_TTL,
+  signed: true,
+}
 
 /**
  * GET /api/auth/login
@@ -23,7 +29,10 @@ setInterval(() => {
 router.get('/login', (req, res) => {
   const state = crypto.randomBytes(16).toString('hex')
   const redirect = typeof req.query.redirect === 'string' ? req.query.redirect : '/'
-  states.set(state, { redirect, expiresAt: Date.now() + STATE_TTL })
+
+  // state 存 signed cookie，跟随客户端，不依赖服务端内存（跨进程/重启均可用）
+  res.cookie(STATE_COOKIE, state, stateCookieOptions)
+  res.cookie(REDIRECT_COOKIE, redirect, stateCookieOptions)
 
   const params = new URLSearchParams({
     client_id: oauthConfig.clientId,
@@ -48,12 +57,19 @@ router.get('/callback', async (req, res) => {
     return res.redirect(`/?auth_error=${encodeURIComponent(error)}`)
   }
 
-  // 校验 state
-  const stateData = states.get(state)
-  if (!stateData) {
+  // 从 signed cookie 读取 state 比对（防 CSRF）
+  const stateFromCookie = req.signedCookies[STATE_COOKIE]
+  if (!state || !stateFromCookie || state !== stateFromCookie) {
+    res.clearCookie(STATE_COOKIE, stateCookieOptions)
+    res.clearCookie(REDIRECT_COOKIE, stateCookieOptions)
     return res.redirect('/?auth_error=invalid_state')
   }
-  states.delete(state)
+
+  const redirect = req.signedCookies[REDIRECT_COOKIE] || '/'
+
+  // 清除 state cookie（一次性使用）
+  res.clearCookie(STATE_COOKIE, stateCookieOptions)
+  res.clearCookie(REDIRECT_COOKIE, stateCookieOptions)
 
   if (!code) {
     return res.redirect('/?auth_error=missing_code')
@@ -94,7 +110,6 @@ router.get('/callback', async (req, res) => {
 
   // 通过 URL fragment 传递 token（# 后不会发到服务器日志）
   // 前端 /callback 页面解析 hash 后写入 localStorage
-  const redirect = stateData.redirect || '/'
   const fragment = new URLSearchParams()
   fragment.set('access_token', accessToken)
   fragment.set('redirect', redirect)
