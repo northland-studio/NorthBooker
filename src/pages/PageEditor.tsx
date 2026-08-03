@@ -18,6 +18,8 @@ import { fetchPage, updatePage } from '@/api/pages'
 import { useAuthStore } from '@/store/auth'
 import { useThemeStore } from '@/store/theme'
 import { formatDate } from '@/utils/fileType'
+import DocSearch from '@/components/DocSearch'
+import CommentPanel from '@/components/CommentPanel'
 
 interface TocItem {
   level: number
@@ -43,6 +45,9 @@ export default function PageEditor() {
   const [saving, setSaving] = useState(false)
   const [toc, setToc] = useState<TocItem[]>([])
   const [showToc, setShowToc] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [showSearch, setShowSearch] = useState(false)
+  const [showComments, setShowComments] = useState(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout>>()
   // 用 ref 解决 useCallback 闭包陷阱：scheduleSave（空依赖）调用的 doSave 需要最新的 title
   const titleRef = useRef(title)
@@ -190,6 +195,24 @@ export default function PageEditor() {
     }
   }
 
+  const handleShare = () => {
+    const url = window.location.href
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }).catch(() => {
+      // fallback
+      const ta = document.createElement('textarea')
+      ta.value = url
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }
+
   if (error) {
     return (
       <div className="viewer-status-wrap">
@@ -227,6 +250,31 @@ export default function PageEditor() {
             <span className="page-editor-time">创建于 {formatDate(createdAt)}</span>
           )}
           <span className="page-editor-time">更新于 {formatDate(updatedAt)}</span>
+          <button className={`pe-share-btn ${copied ? 'pe-share-btn--copied' : ''}`} onClick={handleShare} title="复制链接">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              {copied ? (
+                <polyline points="20 6 9 17 4 12" />
+              ) : (
+                <>
+                  <circle cx="18" cy="5" r="3" />
+                  <circle cx="6" cy="12" r="3" />
+                  <circle cx="18" cy="19" r="3" />
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                </>
+              )}
+            </svg>
+          </button>
+          <button
+            className={`pe-share-btn ${showSearch ? 'pe-btn--active' : ''}`}
+            onClick={() => setShowSearch(!showSearch)}
+            title="搜索"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </button>
           {saving && <span className="page-editor-saving">保存中...</span>}
         </div>
 
@@ -272,6 +320,8 @@ export default function PageEditor() {
         )}
       </div>
 
+      {showSearch && <DocSearch editor={editor} />}
+
       <div className={`page-editor-body ${theme === 'dark' ? 'page-editor-body--dark' : ''}`}>
         {showToc && toc.length > 0 && (
           <aside className="page-editor-toc">
@@ -306,6 +356,26 @@ export default function PageEditor() {
           </div>
         </div>
       </div>
+
+      {/* 评论悬浮按钮 */}
+      {id && (
+        <>
+          <button
+            className={`comment-fab ${showComments ? 'comment-fab--active' : ''}`}
+            onClick={() => setShowComments(!showComments)}
+            title="评论"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+          </button>
+          <CommentPanel
+            docId={id}
+            open={showComments}
+            onClose={() => setShowComments(false)}
+          />
+        </>
+      )}
     </div>
   )
 }

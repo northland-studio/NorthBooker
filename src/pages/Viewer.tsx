@@ -5,7 +5,7 @@ import { useThemeStore } from '@/store/theme'
 import { fetchDocumentById } from '@/api/documents'
 import { getFileTypeLabel, formatSize, formatDate } from '@/utils/fileType'
 import BookmarkButton from '@/components/BookmarkButton'
-import CommentSection from '@/components/CommentSection'
+import CommentPanel from '@/components/CommentPanel'
 import type { Document, FileType } from '@/types/document'
 import type { PreviewDocument } from '@doc-preview/core'
 
@@ -30,6 +30,7 @@ export default function Viewer() {
   const [error, setError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState(false)
+  const [showComments, setShowComments] = useState(false)
   const [officeBuffer, setOfficeBuffer] = useState<ArrayBuffer | null>(null)
   const copyTimer = useRef<ReturnType<typeof setTimeout>>()
 
@@ -136,8 +137,24 @@ export default function Viewer() {
         <div className="viewer-content">
           <DocPreview documents={[previewDoc]} dark={theme === 'dark'} />
         </div>
-        <CommentSection docId={doc.id} />
       </div>
+
+      {/* 评论悬浮按钮 */}
+      <button
+        className={`comment-fab ${showComments ? 'comment-fab--active' : ''}`}
+        onClick={() => setShowComments(!showComments)}
+        title="评论"
+      >
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+        </svg>
+      </button>
+
+      <CommentPanel
+        docId={doc.id}
+        open={showComments}
+        onClose={() => setShowComments(false)}
+      />
     </div>
   )
 }

@@ -29,8 +29,10 @@ router.post('/:docId', authMiddleware, (req, res) => {
     return res.status(400).json({ error: '评论内容不能超过2000字' })
   }
 
+  // 兼容：document_id 可引用 documents 或 pages 表
   const doc = db.prepare('SELECT id FROM documents WHERE id = ?').get(req.params.docId)
-  if (!doc) return res.status(404).json({ error: '文档不存在' })
+  const page = db.prepare('SELECT id FROM pages WHERE id = ?').get(req.params.docId)
+  if (!doc && !page) return res.status(404).json({ error: '文档不存在' })
 
   const result = db
     .prepare('INSERT INTO comments (document_id, user_id, content, created_at) VALUES (?, ?, ?, ?)')
