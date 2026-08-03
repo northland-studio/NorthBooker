@@ -7,6 +7,7 @@ const DB_PATH = path.resolve(__dirname, '../data/northbooker.sqlite')
 
 const db = new Database(DB_PATH)
 db.pragma('journal_mode = WAL')
+db.pragma('foreign_keys = OFF')
 
 // 初始化表结构
 db.exec(`

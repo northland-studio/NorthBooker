@@ -46,7 +46,8 @@ export default function CommentPanel({ docId, open, onClose }: CommentPanelProps
 
   const canDelete = (c: Comment) => {
     if (!user) return false
-    return c.userId === user.id || (user.level ?? 0) >= 1
+    const commentUserId = (c as any).user_id ?? c.userId
+    return commentUserId === user.id || (user.level ?? 0) >= 1
   }
 
   return (
@@ -98,20 +99,25 @@ export default function CommentPanel({ docId, open, onClose }: CommentPanelProps
             {comments.length === 0 ? (
               <div className="comment-empty">暂无评论</div>
             ) : (
-              comments.map((c) => (
+              comments.map((c: any) => {
+                const commentDate = c.created_at ?? c.createdAt
+                const commentAvatar = c.avatar
+                const commentUsername = c.username
+                const commentLevel = c.level ?? 0
+                return (
                 <div key={c.id} className="comment-item">
                   <div className="comment-avatar">
-                    {c.avatar ? (
-                      <img src={c.avatar} alt={c.username} />
+                    {commentAvatar ? (
+                      <img src={commentAvatar} alt={commentUsername} />
                     ) : (
-                      <span className="comment-avatar-fallback">{c.username.charAt(0)}</span>
+                      <span className="comment-avatar-fallback">{commentUsername?.charAt(0)}</span>
                     )}
                   </div>
                   <div className="comment-body">
                     <div className="comment-meta">
-                      <span className="comment-username">{c.username}</span>
-                      {c.level > 0 && <span className="comment-badge">管理员</span>}
-                      <span className="comment-time">{formatDate(c.createdAt)}</span>
+                      <span className="comment-username">{commentUsername}</span>
+                      {commentLevel > 0 && <span className="comment-badge">管理员</span>}
+                      <span className="comment-time">{formatDate(commentDate)}</span>
                     </div>
                     <div className="comment-content">{c.content}</div>
                   </div>
@@ -124,7 +130,7 @@ export default function CommentPanel({ docId, open, onClose }: CommentPanelProps
                     </button>
                   )}
                 </div>
-              ))
+              )})
             )}
           </div>
         </div>
