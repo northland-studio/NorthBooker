@@ -168,10 +168,102 @@ button {
   color: var(--color-primary);
 }
 
-/* 文档查看页：撑满剩余视口 */
+/* 文档查看页：工具栏 + 内容区 */
 .viewer-page {
   height: calc(100vh - 56px);
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
+}
+
+.viewer-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+  flex-shrink: 0;
+}
+
+.viewer-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-text);
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.viewer-back:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.viewer-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.viewer-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.viewer-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.viewer-content {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 文档不存在状态 */
+.viewer-status-wrap {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.viewer-status-card {
+  text-align: center;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 40px;
+  max-width: 360px;
+}
+
+.viewer-status-card h2 {
+  font-size: 20px;
+  color: var(--color-text);
+  margin-bottom: 8px;
+}
+
+.viewer-status-card p {
+  font-size: 14px;
+  color: var(--color-text-muted);
+  margin-bottom: 16px;
 }
 
 /* 文档列表页 */
@@ -998,6 +1090,79 @@ button {
   font-size: 13px;
   outline: none;
 }
+
+/* ===== 移动端响应式 ===== */
+@media (max-width: 640px) {
+  .navbar {
+    padding: 0 12px;
+  }
+
+  .navbar-brand span {
+    display: none;
+  }
+
+  .documents-page,
+  .admin-page {
+    padding: 16px 12px;
+  }
+
+  .documents-toolbar {
+    gap: 8px;
+  }
+
+  .filter-tabs {
+    width: 100%;
+    order: 3;
+  }
+
+  .search-input {
+    flex: 1 1 100%;
+  }
+
+  .doc-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+  }
+
+  .doc-card-thumb {
+    height: 100px;
+  }
+
+  .viewer-toolbar {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .viewer-meta {
+    display: none;
+  }
+
+  .viewer-title {
+    font-size: 14px;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .stat-value {
+    font-size: 22px;
+  }
+
+  .admin-table th,
+  .admin-table td {
+    padding: 10px 10px;
+  }
+
+  .dialog-card {
+    padding: 18px;
+  }
+
+  .dropzone {
+    padding: 24px 14px;
+  }
+}
+
 
 
 
