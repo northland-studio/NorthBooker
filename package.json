@@ -9,9 +9,12 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write \"src/**/*.{ts,tsx,css}\""
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
+    "postinstall": "node scripts/patch-doc-preview.js"
   },
   "dependencies": {
+    "@doc-preview/enterprise": "^1.1.4",
+    "@doc-preview/office": "^1.1.4",
     "@doc-preview/react": "^1.1.4",
     "@doc-preview/themes": "^1.1.4",
     "axios": "^1.7.7",
