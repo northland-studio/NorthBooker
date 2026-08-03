@@ -68,6 +68,14 @@ db.exec(`
   );
 `)
 
+// 迁移：为已有的 pages 表补充 visibility 列（v0.2.0+）
+try {
+  db.exec('ALTER TABLE pages ADD COLUMN visibility TEXT NOT NULL DEFAULT \'private\'')
+  console.log('[北牖] 已迁移 pages.visibility 列')
+} catch {
+  // 列已存在则跳过
+}
+
 // 初始化示例文档（仅当文档表为空时执行）
 const count = db.prepare('SELECT COUNT(*) AS c FROM documents').get()
 if (count.c === 0) {
