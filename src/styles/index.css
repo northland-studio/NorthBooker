@@ -182,6 +182,62 @@ button {
   gap: 8px;
 }
 
+/* 汉堡菜单按钮（桌面端隐藏） */
+.navbar-menu-btn {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  cursor: pointer;
+  padding: 0;
+  transition: all 0.2s;
+}
+
+.navbar-menu-btn span {
+  display: block;
+  width: 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--color-text);
+  transition: all 0.25s ease;
+}
+
+.navbar-menu-btn--open span:nth-child(1) {
+  transform: translateY(7px) rotate(45deg);
+}
+
+.navbar-menu-btn--open span:nth-child(2) {
+  opacity: 0;
+}
+
+.navbar-menu-btn--open span:nth-child(3) {
+  transform: translateY(-7px) rotate(-45deg);
+}
+
+.navbar-menu-btn:hover {
+  border-color: var(--color-primary);
+}
+
+.navbar-menu-btn:hover span {
+  background: var(--color-primary);
+}
+
+/* 移动端菜单遮罩 */
+.navbar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  top: 56px;
+  z-index: 14;
+  background: var(--color-overlay);
+}
+
 /* 主题切换按钮 */
 .theme-toggle {
   display: inline-flex;
@@ -891,16 +947,6 @@ button {
   font-weight: 500;
 }
 
-/* 列表响应式 */
-@media (max-width: 640px) {
-  .doc-list-cell--size,
-  .doc-list-cell--date,
-  .doc-list-header .doc-list-cell--size,
-  .doc-list-header .doc-list-cell--date {
-    display: none;
-  }
-}
-
 .documents-status,
 .viewer-status {
   display: flex;
@@ -1586,94 +1632,6 @@ button {
   outline: none;
 }
 
-/* ===== 移动端响应式 ===== */
-@media (max-width: 640px) {
-  .navbar {
-    padding: 0 12px;
-  }
-
-  .navbar-brand span {
-    display: none;
-  }
-
-  .documents-page,
-  .admin-page {
-    padding: 16px 12px;
-  }
-
-  .documents-toolbar {
-    gap: 8px;
-  }
-
-  .filter-tabs {
-    width: 100%;
-    order: 3;
-  }
-
-  .search-input {
-    flex: 1 1 100%;
-  }
-
-  .doc-grid {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 12px;
-  }
-
-  .doc-card-thumb {
-    height: 100px;
-  }
-
-  .viewer-toolbar {
-    padding: 8px 12px;
-    gap: 8px;
-  }
-
-  .viewer-meta {
-    display: none;
-  }
-
-  .viewer-title {
-    font-size: 14px;
-  }
-
-  .viewer-share span,
-  .viewer-back {
-    font-size: 0;
-  }
-
-  .viewer-back svg,
-  .viewer-share svg {
-    width: 20px;
-    height: 20px;
-  }
-
-  /* 移动端评论区全宽 */
-  .comment-section {
-    max-height: 35vh;
-  }
-
-  .stat-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .stat-value {
-    font-size: 22px;
-  }
-
-  .admin-table th,
-  .admin-table td {
-    padding: 10px 10px;
-  }
-
-  .dialog-card {
-    padding: 18px;
-  }
-
-  .dropzone {
-    padding: 24px 14px;
-  }
-}
-
 /* ===== PDF 等查看器汉化（CSS 覆层方案） ===== */
 #doc-preview-root .dp-pdf-controls {
   font-size: 0;
@@ -1743,29 +1701,6 @@ button {
 #doc-preview-root.dp-root--dark .dp-pdf-controls,
 #doc-preview-root.dp-root--dark .dp-header {
   background: var(--color-card);
-}
-
-/* 移动端 PDF 触控优化 */
-@media (max-width: 640px) {
-  #doc-preview-root .dp-pdf-controls {
-    padding: 6px 8px;
-    gap: 4px;
-  }
-
-  #doc-preview-root .dp-pdf-controls__page-input {
-    width: 2.6rem;
-  }
-
-  #doc-preview-root .dp-btn--icon {
-    min-width: 32px;
-    min-height: 32px;
-    padding: 6px;
-  }
-
-  #doc-preview-root .dp-pdf-thumbs {
-    width: 80px;
-    flex: 0 0 80px;
-  }
 }
 
 /* ===== 在线文档列表页 ===== */
@@ -2650,24 +2585,216 @@ button {
   color: var(--color-primary);
 }
 
-/* 移动端适配 */
+/* ===== 移动端响应式（max-width: 640px） ===== */
 @media (max-width: 640px) {
-  .navbar-links {
+  /* 导航栏 */
+  .navbar {
+    padding: 0 12px;
+  }
+  .navbar-brand span {
     display: none;
   }
+  .navbar-menu-btn {
+    display: flex;
+  }
+  .navbar-links {
+    display: flex;
+    flex-direction: column;
+    position: fixed;
+    top: 56px;
+    left: 0;
+    right: 0;
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+    padding: 8px 12px;
+    gap: 2px;
+    z-index: 15;
+    visibility: hidden;
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: visibility 0.2s, opacity 0.2s, transform 0.2s ease;
+  }
+  .navbar-links--open {
+    visibility: visible;
+    opacity: 1;
+    transform: translateY(0);
+    box-shadow: 0 8px 24px var(--color-shadow);
+  }
+  .navbar-link {
+    padding: 12px 12px;
+    font-size: 15px;
+    border-radius: 8px;
+  }
+  .navbar-overlay {
+    display: block;
+  }
 
+  /* 文档列表页 */
+  .documents-page,
+  .admin-page {
+    padding: 16px 12px;
+  }
+  .documents-toolbar {
+    gap: 8px;
+  }
+  .filter-tabs {
+    width: 100%;
+    order: 3;
+  }
+  .search-input {
+    flex: 1 1 100%;
+  }
+  .doc-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 12px;
+  }
+  .doc-card-thumb {
+    height: 100px;
+  }
+
+  /* 列表视图 */
+  .doc-list-cell--size,
+  .doc-list-cell--date,
+  .doc-list-header .doc-list-cell--size,
+  .doc-list-header .doc-list-cell--date {
+    display: none;
+  }
+  .doc-list-cell--type {
+    min-width: 60px;
+  }
+
+  /* 文档查看器 */
+  .viewer-toolbar {
+    padding: 8px 12px;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .viewer-meta {
+    display: none;
+  }
+  .viewer-title {
+    font-size: 14px;
+  }
+  .viewer-share span,
+  .viewer-back {
+    font-size: 0;
+  }
+  .viewer-back svg,
+  .viewer-share svg {
+    width: 20px;
+    height: 20px;
+  }
+  .comment-section {
+    max-height: 35vh;
+  }
+
+  /* 在线文档编辑器 */
   .page-editor-main {
     padding: 20px 16px 80px;
   }
-
   .page-editor-toolbar {
     padding: 6px 10px;
     gap: 8px;
   }
+  .page-editor-toc {
+    display: block;
+    position: fixed;
+    top: 56px;
+    left: 0;
+    width: 260px;
+    max-width: 80vw;
+    height: calc(100vh - 56px);
+    z-index: 20;
+    border-right: 1px solid var(--color-border);
+    border-radius: 0 12px 12px 0;
+    box-shadow: 4px 0 24px var(--color-shadow);
+    max-height: calc(100vh - 56px);
+  }
+  .page-editor-time {
+    display: none;
+  }
+  .page-editor-author {
+    max-width: 90px;
+  }
 
+  /* 工具栏按钮 */
   .pe-btn {
     width: 28px;
     height: 28px;
+  }
+
+  /* 评论面板 + 悬浮按钮 */
+  .comment-panel {
+    width: 100vw;
+    max-width: 100vw;
+  }
+  .comment-fab {
+    right: 12px;
+    bottom: 16px;
+    width: 44px;
+    height: 44px;
+  }
+
+  /* 静态页面（用户协议 / 下载） */
+  .static-page {
+    padding: 16px 12px 64px;
+  }
+  .static-page-content h1 {
+    font-size: 22px;
+  }
+  .download-card {
+    padding: 14px 14px;
+  }
+  .download-card-icon {
+    width: 40px;
+    height: 40px;
+  }
+  .download-card-label {
+    font-size: 14px;
+  }
+
+  /* 用户下拉菜单 */
+  .user-dropdown {
+    min-width: 180px;
+    right: -4px;
+  }
+
+  /* 管理后台 */
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .stat-value {
+    font-size: 22px;
+  }
+  .admin-table th,
+  .admin-table td {
+    padding: 10px 10px;
+  }
+
+  /* 弹窗 */
+  .dialog-card {
+    padding: 18px;
+  }
+  .dropzone {
+    padding: 24px 14px;
+  }
+
+  /* PDF 查看器 */
+  #doc-preview-root .dp-pdf-controls {
+    padding: 6px 8px;
+    gap: 4px;
+  }
+  #doc-preview-root .dp-pdf-controls__page-input {
+    width: 2.6rem;
+  }
+  #doc-preview-root .dp-btn--icon {
+    min-width: 32px;
+    min-height: 32px;
+    padding: 6px;
+  }
+  #doc-preview-root .dp-pdf-thumbs {
+    width: 80px;
+    flex: 0 0 80px;
   }
 }
 
