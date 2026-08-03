@@ -5,7 +5,7 @@ import qiniu from 'qiniu'
 const accessKey = process.env.QINIU_ACCESS_KEY || ''
 const secretKey = process.env.QINIU_SECRET_KEY || ''
 const bucket = process.env.QINIU_BUCKET || 'northbooker'
-const cdnDomain = (process.env.QINIU_CDN_DOMAIN || 'http://cdn.northbooker.xuanjian.top').replace(/\/$/, '')
+const cdnDomain = (process.env.QINIU_CDN_DOMAIN || 'https://cdn.northbooker.xuanjian.top').replace(/\/$/, '')
 
 const mac = new qiniu.auth.digest.Mac(accessKey, secretKey)
 

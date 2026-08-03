@@ -40,6 +40,15 @@ router.get('/token', (req, res) => {
   }
   const key = buildKey(fileName)
   const uploadToken = getUploadToken(key)
+  console.log('[北牖] 颁发上传凭证:', {
+    user: req.user?.id,
+    fileName,
+    key,
+    uploadUrl: QINIU_UPLOAD_URL,
+    tokenLen: uploadToken.length,
+    tokenHead: uploadToken.slice(0, 24),
+    tokenTail: uploadToken.slice(-16),
+  })
   res.json({
     uploadToken,
     key,
