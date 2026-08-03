@@ -93,6 +93,13 @@ export default function PageEditor() {
     return false
   }, [user, authorId])
 
+  // 非编辑者禁止编辑 ProseMirror
+  useEffect(() => {
+    if (editor) {
+      editor.setEditable(canEdit)
+    }
+  }, [editor, canEdit])
+
   // 判断是否为作者（用于显示可见性开关）
   const isAuthor = useMemo(() => {
     if (!user) return false

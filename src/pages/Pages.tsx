@@ -58,11 +58,21 @@ export default function Pages() {
     load()
   }
 
-  const formatDate = (s: string) => new Date(s).toLocaleDateString('zh-CN')
+  const formatDate = (s: string) => {
+    if (!s) return ''
+    const d = new Date(s)
+    if (isNaN(d.getTime())) return ''
+    return d.toLocaleDateString('zh-CN')
+  }
+
+  // API 返回蛇形命名，统一映射
+  const getField = (node: any, camel: string, snake: string) =>
+    node[camel] ?? node[snake] ?? ''
 
   const canDelete = (node: PageNode) => {
     if (!user) return false
-    return node.authorId === user.id || (user.level ?? 0) >= 1
+    const aid = getField(node, 'authorId', 'author_id')
+    return Number(aid) === user.id || (user.level ?? 0) >= 1
   }
 
   const renderNode = (node: PageNode, depth: number) => (
@@ -76,11 +86,11 @@ export default function Pages() {
           {node.title}
         </Link>
         <span className="page-tree-meta">
-          <span>{node.authorName}</span>
-          <span className={`page-vis-badge ${node.visibility === 'public' ? 'vis-public' : 'vis-private'}`}>
-            {node.visibility === 'public' ? '公开' : '私有'}
+          <span>{getField(node, 'authorName', 'author_name')}</span>
+          <span className={`page-vis-badge ${getField(node, 'visibility', 'visibility') === 'public' ? 'vis-public' : 'vis-private'}`}>
+            {getField(node, 'visibility', 'visibility') === 'public' ? '公开' : '私有'}
           </span>
-          <span>{formatDate(node.createdAt || node.updatedAt)}</span>
+          <span>{formatDate(getField(node, 'createdAt', 'created_at') || getField(node, 'updatedAt', 'updated_at'))}</span>
         </span>
         {canDelete(node) && (
           <button className="page-tree-del" onClick={() => handleDelete(node.id)} title="删除">
