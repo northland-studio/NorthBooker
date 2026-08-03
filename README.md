@@ -15,6 +15,8 @@
 ![Express](https://img.shields.io/badge/Express-4.21-000000?logo=express&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white)
 ![OAuth](https://img.shields.io/badge/OAuth-2.0-4A90D9)
+![Tiptap](https://img.shields.io/badge/Tiptap-Rich%20Text-3182CE)
+![Electron](https://img.shields.io/badge/Electron-31-47848F?logo=electron&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
 ![发布单位](https://img.shields.io/badge/发布单位-北域工作室-004AAD)
@@ -39,12 +41,15 @@
 
 ## 功能特性
 
-- 多格式文档在线预览：PDF、DOCX、图片、Office、文本、Markdown 等
+- 多格式文档在线预览：PDF、DOCX、图片、Office（XLSX/CSV/PPTX）、文本、Markdown 等
+- 在线文档编辑：基于 Tiptap 富文本编辑器，支持标题、列表、表格、代码块、任务列表等，自动保存
 - 文档管理：拖拽上传（前端直传七牛，真实进度回调）、重命名、可见性控制、删除
 - 单点登录：使用玄剑官网账号 OAuth 登录，无需另行注册
 - 分级权限：基于玄剑用户等级（level 0-3）控制访问与后台管理
+- 社交功能：一键转发分享链接、书签收藏、文档评论
 - 管理后台：统计概览、文档管理、用户管理
 - 明暗双主题：亮色（白 + #004AAD）/ 暗色（#1A1B1D + #004AAD）
+- 桌面应用：Electron 封装（Windows/macOS/Linux），GitHub Actions 自动构建
 - 响应式布局，适配桌面与移动端
 
 ---
@@ -60,6 +65,8 @@
 | 状态管理 | Zustand |
 | 请求库 | Axios |
 | 文档渲染 | @doc-preview/react |
+| 富文本编辑 | Tiptap (ProseMirror) |
+| 桌面封装 | Electron 31 |
 | 后端 | Node.js + Express |
 | 数据库 | SQLite (better-sqlite3) |
 | 对象存储 | 七牛云（东南亚 as0 区域，bucket: northbooker） |
@@ -72,35 +79,36 @@
 ```
 northbooker/
 ├── src/                       # 前端源码
-│   ├── api/                   # 接口请求封装（axios client、documents、auth、admin、uploads）
-│   ├── components/            # 通用组件（Layout、Navbar、UserMenu、UploadDialog、RequireLevel 等）
-│   ├── pages/                 # 页面（Documents、Viewer、Admin、AuthCallback）
+│   ├── api/                   # 接口请求封装（client、documents、auth、admin、uploads、bookmarks、comments、pages）
+│   ├── components/            # 通用组件（Layout、Navbar、UserMenu、UploadDialog、RequireLevel、BookmarkButton、CommentSection 等）
+│   ├── pages/                 # 页面（Documents、Viewer、Admin、AuthCallback、Pages、PageEditor）
 │   ├── store/                 # 状态管理（theme、auth）
 │   ├── styles/                # 全局样式
 │   ├── types/                 # 类型定义（document、user）
 │   ├── utils/                 # 工具函数（fileType）
 │   ├── App.tsx                # 根组件与路由
-│   ├── main.tsx               # 应用入口
-│   └── vite-env.d.ts          # 环境变量类型
+│   └── main.tsx               # 应用入口
 ├── server/                    # 后端服务
 │   ├── src/
-│   │   ├── middleware/        # 认证与权限中间件（auth/admin/superAdmin/optional）
-│   │   ├── routes/            # 路由（documents、auth、admin、uploads）
+│   │   ├── middleware/        # 认证与权限中间件
+│   │   ├── routes/            # 路由（documents、auth、admin、uploads、bookmarks、comments、pages）
 │   │   ├── utils/             # 后端工具（fileType）
 │   │   ├── app.js             # Express 应用
 │   │   ├── database.js        # SQLite 初始化与示例数据
 │   │   ├── index.js           # 服务入口
-│   │   ├── oauth.js           # 玄剑 OAuth 配置与 token 校验缓存
-│   │   └── qiniu.js           # 七牛对象存储配置与上传/删除工具
+│   │   ├── oauth.js           # 玄剑 OAuth 配置
+│   │   └── qiniu.js           # 七牛对象存储配置
 │   ├── data/                  # SQLite 数据库目录
 │   └── .env.example
+├── electron/                  # Electron 桌面版
+│   ├── main.js                # Electron 主进程
+│   ├── preload.js             # 预加载脚本（contextBridge）
+│   └── package.json           # 桌面版依赖（electron-builder）
 ├── public/                    # 前端静态资源与示例文档
-├── scripts/                   # 构建辅助脚本（doc-preview 补丁）
+├── .github/workflows/         # GitHub Actions 构建流水线
+│   └── build-electron.yml     # 自动构建三平台桌面应用
 ├── index.html                 # HTML 入口
-├── vite.config.ts             # Vite 配置（含 doc-preview worker 修复）
-├── tsconfig.json              # TypeScript 配置
-├── eslint.config.js           # ESLint 配置
-├── .prettierrc                # Prettier 配置
+├── vite.config.ts             # Vite 配置
 └── package.json               # 依赖与脚本
 ```
 
@@ -277,8 +285,10 @@ QINIU_CDN_DOMAIN=https://cdn.northbooker.xuanjian.top
 
 | 路径 | 页面 | 权限 |
 |:---|:---|:---|
-| `/` | 文档列表 | 公开 |
-| `/viewer/:id` | 文档查看 | 公开 |
+| `/` | 文档列表（含书签筛选） | 公开 |
+| `/viewer/:id` | 文档查看（含评论、转发、书签） | 公开 |
+| `/pages` | 在线文档列表 | 公开 |
+| `/pages/:id` | 在线文档编辑器 | 登录后可编辑 |
 | `/callback` | OAuth 回调处理 | 公开 |
 | `/admin` | 管理后台 | 需登录且 level >= 1 |
 
@@ -303,7 +313,19 @@ QINIU_CDN_DOMAIN=https://cdn.northbooker.xuanjian.top
 | `/api/admin/documents` | GET | level >= 1 | 文档管理列表 |
 | `/api/admin/users` | GET | level >= 1 | 用户列表 |
 | `/api/admin/documents/:id/visibility` | PUT | level >= 1 | 切换可见性 |
-| `/api/admin/documents/:id` | DELETE | level >= 1 | 删除文档 |
+| `/api/admin/documents/:id` | DELETE | level >= 1 | 删除文档（同步清理七牛） |
+| `/api/bookmarks` | GET | 登录 | 获取书签列表 |
+| `/api/bookmarks/check/:docId` | GET | 登录 | 检查文档是否已收藏 |
+| `/api/bookmarks/:docId` | POST | 登录 | 添加书签 |
+| `/api/bookmarks/:docId` | DELETE | 登录 | 移除书签 |
+| `/api/comments/:docId` | GET | 公开 | 获取评论列表 |
+| `/api/comments/:docId` | POST | 登录 | 发表评论 |
+| `/api/comments/:id` | DELETE | 登录 | 删除评论（本人/管理员） |
+| `/api/pages/tree` | GET | 公开 | 获取页面树 |
+| `/api/pages/:id` | GET | 公开 | 获取页面 |
+| `/api/pages` | POST | 登录 | 创建页面 |
+| `/api/pages/:id` | PUT | 登录 | 更新页面（作者/管理员） |
+| `/api/pages/:id` | DELETE | 登录 | 删除页面（作者/管理员） |
 
 ---
 
@@ -322,6 +344,25 @@ QINIU_CDN_DOMAIN=https://cdn.northbooker.xuanjian.top
 | 部署 | 部署相关 |
 
 示例：`功能: OAuth 对接玄剑官网单点登录`
+
+---
+## 桌面版
+
+北牖提供基于 Electron 的桌面客户端，通过 webview 加载在线生产站点。
+
+### 构建桌面应用
+
+```bash
+cd electron
+npm install
+npm run build
+```
+
+构建产物位于 `electron/dist/`，包含 Windows (.exe NSIS 安装包)、macOS (.dmg)、Linux (.AppImage / .deb)。
+
+### CI/CD 自动构建
+
+推送至 `main` 分支（`electron/` 目录有变更）或手动触发工作流，GitHub Actions 自动构建并上传三平台安装包。
 
 ---
 
