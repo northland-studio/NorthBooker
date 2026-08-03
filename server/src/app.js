@@ -3,6 +3,7 @@ import cors from 'cors'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import documentsRouter from './routes/documents.js'
+import authRouter from './routes/auth.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -16,6 +17,7 @@ app.use('/uploads', express.static(path.resolve(__dirname, '../data/uploads')))
 
 // 路由
 app.use('/api/documents', documentsRouter)
+app.use('/api/auth', authRouter)
 
 // 健康检查
 app.get('/api/health', (req, res) => {

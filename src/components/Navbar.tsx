@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import ThemeToggle from './ThemeToggle'
+import UserMenu from './UserMenu'
 
 // 顶部导航栏
 export default function Navbar() {
@@ -11,6 +12,7 @@ export default function Navbar() {
       </Link>
       <div className="navbar-actions">
         <ThemeToggle />
+        <UserMenu />
       </div>
     </header>
   )
