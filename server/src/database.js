@@ -52,6 +52,19 @@ db.exec(`
     FOREIGN KEY (document_id) REFERENCES documents(id),
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
+
+  CREATE TABLE IF NOT EXISTS pages (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL DEFAULT '无标题文档',
+    content TEXT NOT NULL DEFAULT '',
+    parent_id TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    author_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (parent_id) REFERENCES pages(id) ON DELETE SET NULL,
+    FOREIGN KEY (author_id) REFERENCES users(id)
+  );
 `)
 
 // 初始化示例文档（仅当文档表为空时执行）
