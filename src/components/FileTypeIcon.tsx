@@ -4,6 +4,9 @@ import type { FileType } from '@/types/document'
 const TYPE_COLOR: Record<FileType, string> = {
   pdf: '#e53935',
   docx: '#1976d2',
+  xlsx: '#2e7d32',
+  csv: '#2e7d32',
+  pptx: '#e65100',
   image: '#7e57c2',
   text: '#546e7a',
   markdown: '#004aad',

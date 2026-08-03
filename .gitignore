@@ -42,3 +42,4 @@ server/data/uploads/*
 
 # 部署临时包
 deploy.tar.gz
+dist.tar.gz

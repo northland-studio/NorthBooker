@@ -87,7 +87,7 @@ export default function UploadDialog({
             type="file"
             hidden
             onChange={(e) => pick(e.target.files?.[0])}
-            accept=".pdf,.docx,.doc,.txt,.md,.markdown,.png,.jpg,.jpeg,.gif,.webp,.svg,.csv,.json,.xml"
+            accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.pptx,.ppt,.txt,.md,.markdown,.png,.jpg,.jpeg,.gif,.webp,.svg,.json,.xml"
           />
           {file ? (
             <div className="dropzone-file">

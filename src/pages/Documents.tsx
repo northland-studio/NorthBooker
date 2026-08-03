@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchDocuments } from '@/api/documents'
+import { fetchBookmarks } from '@/api/bookmarks'
 import type { Document, FileType } from '@/types/document'
 import DocumentCard from '@/components/DocumentCard'
 import UploadDialog from '@/components/UploadDialog'
 import { useAuthStore } from '@/store/auth'
 import { isAdmin } from '@/types/user'
 
-type FilterType = FileType | 'all'
+type FilterType = FileType | 'all' | 'bookmarks'
 
 const FILTERS: { value: FilterType; label: string }[] = [
   { value: 'all', label: '全部' },
+  { value: 'bookmarks', label: '书签' },
   { value: 'pdf', label: 'PDF' },
   { value: 'docx', label: 'Word' },
+  { value: 'xlsx', label: 'Excel' },
+  { value: 'pptx', label: 'PPT' },
   { value: 'image', label: '图片' },
   { value: 'markdown', label: 'Markdown' },
   { value: 'text', label: '文本' },
@@ -20,6 +24,7 @@ const FILTERS: { value: FilterType; label: string }[] = [
 // 文档列表页
 export default function Documents() {
   const [docs, setDocs] = useState<Document[]>([])
+  const [bookmarkDocs, setBookmarkDocs] = useState<Document[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [keyword, setKeyword] = useState('')
@@ -33,9 +38,13 @@ export default function Documents() {
   const load = () => {
     setLoading(true)
     setError(false)
-    fetchDocuments()
-      .then((d) => {
-        setDocs(d)
+    Promise.all([
+      fetchDocuments().catch(() => []),
+      user ? fetchBookmarks().catch(() => []) : Promise.resolve([]),
+    ])
+      .then(([docList, bmList]) => {
+        setDocs(docList)
+        setBookmarkDocs(bmList)
         setLoading(false)
       })
       .catch(() => {
@@ -46,18 +55,18 @@ export default function Documents() {
 
   useEffect(() => {
     load()
-  }, [])
+  }, [user])
 
   const filtered = useMemo(() => {
-    let list = docs
-    if (filter !== 'all') list = list.filter((d) => d.type === filter)
+    let list = filter === 'bookmarks' ? bookmarkDocs : docs
+    if (filter !== 'all' && filter !== 'bookmarks') list = list.filter((d) => d.type === filter)
     const kw = keyword.trim()
     if (kw) list = list.filter((d) => d.title.includes(kw))
     return [...list].sort((a, b) => {
       if (sort === 'title') return a.title.localeCompare(b.title, 'zh')
       return b.updatedAt.localeCompare(a.updatedAt)
     })
-  }, [docs, filter, keyword, sort])
+  }, [docs, bookmarkDocs, filter, keyword, sort])
 
   return (
     <div className="documents-page">

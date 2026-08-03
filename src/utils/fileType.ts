@@ -5,8 +5,10 @@ export function getFileType(fileName: string): FileType {
   const ext = fileName.split('.').pop()?.toLowerCase() ?? ''
   if (ext === 'pdf') return 'pdf'
   if (['docx', 'doc', 'docm', 'dotx'].includes(ext)) return 'docx'
+  if (['xlsx', 'xls', 'xlsm', 'xltx', 'csv'].includes(ext)) return 'xlsx'
+  if (['pptx', 'ppt', 'pptm', 'ppsx'].includes(ext)) return 'pptx'
   if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'tif', 'tiff'].includes(ext)) return 'image'
-  if (['txt', 'log', 'csv', 'tsv', 'json', 'xml'].includes(ext)) return 'text'
+  if (['txt', 'log', 'tsv', 'json', 'xml'].includes(ext)) return 'text'
   if (['md', 'markdown'].includes(ext)) return 'markdown'
   return 'other'
 }
@@ -16,6 +18,9 @@ export function getFileTypeLabel(type: FileType): string {
   const map: Record<FileType, string> = {
     pdf: 'PDF',
     docx: 'Word',
+    xlsx: 'Excel',
+    csv: 'CSV',
+    pptx: 'PPT',
     image: '图片',
     text: '文本',
     markdown: 'Markdown',

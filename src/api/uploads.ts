@@ -22,6 +22,13 @@ export async function fetchUploadToken(fileName: string): Promise<UploadToken> {
   const { data } = await client.get<UploadToken>('/uploads/token', {
     params: { fileName },
   })
+  console.log('[北牖] 获取上传凭证:', {
+    fileName,
+    key: data.key,
+    uploadUrl: data.uploadUrl,
+    tokenLen: data.uploadToken?.length,
+    tokenHead: data.uploadToken?.slice(0, 24),
+  })
   return data
 }
 
@@ -65,6 +72,14 @@ export function uploadToQiniu(
     }
 
     xhr.onload = () => {
+      console.log('[北牖] 七牛上传响应:', {
+        status: xhr.status,
+        response: xhr.responseText?.slice(0, 300),
+        tokenLen: uploadToken?.length,
+        tokenHead: uploadToken?.slice(0, 24),
+        key,
+        uploadUrl,
+      })
       if (xhr.status === 200) {
         try {
           resolve(JSON.parse(xhr.responseText) as QiniuUploadResponse)

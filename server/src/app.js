@@ -5,6 +5,8 @@ import documentsRouter from './routes/documents.js'
 import authRouter from './routes/auth.js'
 import adminRouter from './routes/admin.js'
 import uploadsRouter from './routes/uploads.js'
+import bookmarksRouter from './routes/bookmarks.js'
+import commentsRouter from './routes/comments.js'
 
 const app = express()
 
@@ -21,10 +23,18 @@ app.use('/api/documents', documentsRouter)
 app.use('/api/auth', authRouter)
 app.use('/api/admin', adminRouter)
 app.use('/api/uploads', uploadsRouter)
+app.use('/api/bookmarks', bookmarksRouter)
+app.use('/api/comments', commentsRouter)
 
 // 健康检查
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', service: 'northbooker' })
+  res.json({
+    status: 'ok',
+    service: 'northbooker',
+    qiniu: process.env.QINIU_ACCESS_KEY ? 'loaded' : 'missing',
+    bucket: process.env.QINIU_BUCKET || 'missing',
+    oauth: process.env.OAUTH_CLIENT_ID || 'missing',
+  })
 })
 
 export default app
