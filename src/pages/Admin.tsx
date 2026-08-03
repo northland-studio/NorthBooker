@@ -9,6 +9,7 @@ import {
   type AdminDocument,
   type AdminUser,
 } from '@/api/admin'
+import { updateDocumentTitle } from '@/api/uploads'
 
 type Tab = 'documents' | 'users'
 
@@ -36,6 +37,8 @@ export default function Admin() {
   const [tab, setTab] = useState<Tab>('documents')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState('')
 
   const loadAll = useCallback(async () => {
     setLoading(true)
@@ -78,6 +81,31 @@ export default function Admin() {
       setStats((s) => (s ? { ...s, documents: s.documents - 1 } : s))
     } catch {
       alert('删除失败')
+    }
+  }
+
+  const startEdit = (doc: AdminDocument) => {
+    setEditingId(doc.id)
+    setEditTitle(doc.title)
+  }
+
+  const cancelEdit = () => {
+    setEditingId(null)
+    setEditTitle('')
+  }
+
+  const saveEdit = async (doc: AdminDocument) => {
+    const t = editTitle.trim()
+    if (!t) {
+      alert('标题不能为空')
+      return
+    }
+    try {
+      const updated = await updateDocumentTitle(doc.id, t)
+      setDocs((list) => list.map((d) => (d.id === doc.id ? { ...d, title: updated.title, updatedAt: updated.updatedAt } : d)))
+      cancelEdit()
+    } catch {
+      alert('重命名失败')
     }
   }
 
@@ -148,7 +176,26 @@ export default function Admin() {
             <tbody>
               {docs.map((d) => (
                 <tr key={d.id}>
-                  <td className="cell-title">{d.title}</td>
+                  <td className="cell-title">
+                    {editingId === d.id ? (
+                      <div className="inline-edit">
+                        <input
+                          className="inline-edit-input"
+                          value={editTitle}
+                          onChange={(e) => setEditTitle(e.target.value)}
+                          autoFocus
+                        />
+                        <button className="link-btn" onClick={() => saveEdit(d)}>
+                          保存
+                        </button>
+                        <button className="link-btn" onClick={cancelEdit}>
+                          取消
+                        </button>
+                      </div>
+                    ) : (
+                      d.title
+                    )}
+                  </td>
                   <td>
                     <span className="doc-tag">{d.type}</span>
                   </td>
@@ -164,12 +211,19 @@ export default function Admin() {
                     </span>
                   </td>
                   <td className="cell-actions">
-                    <button className="link-btn" onClick={() => handleToggleVisibility(d)}>
-                      {d.visibility === 'public' ? '设为私有' : '设为公开'}
-                    </button>
-                    <button className="link-btn danger" onClick={() => handleDelete(d)}>
-                      删除
-                    </button>
+                    {editingId !== d.id && (
+                      <>
+                        <button className="link-btn" onClick={() => startEdit(d)}>
+                          重命名
+                        </button>
+                        <button className="link-btn" onClick={() => handleToggleVisibility(d)}>
+                          {d.visibility === 'public' ? '设为私有' : '设为公开'}
+                        </button>
+                        <button className="link-btn danger" onClick={() => handleDelete(d)}>
+                          删除
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}

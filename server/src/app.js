@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url'
 import documentsRouter from './routes/documents.js'
 import authRouter from './routes/auth.js'
 import adminRouter from './routes/admin.js'
+import uploadsRouter from './routes/uploads.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const app = express()
@@ -20,6 +21,7 @@ app.use('/uploads', express.static(path.resolve(__dirname, '../data/uploads')))
 app.use('/api/documents', documentsRouter)
 app.use('/api/auth', authRouter)
 app.use('/api/admin', adminRouter)
+app.use('/api/uploads', uploadsRouter)
 
 // 健康检查
 app.get('/api/health', (req, res) => {

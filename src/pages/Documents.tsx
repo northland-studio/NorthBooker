@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { fetchDocuments } from '@/api/documents'
 import type { Document, FileType } from '@/types/document'
 import DocumentCard from '@/components/DocumentCard'
+import UploadDialog from '@/components/UploadDialog'
+import { useAuthStore } from '@/store/auth'
+import { isAdmin } from '@/types/user'
 
 type FilterType = FileType | 'all'
 
@@ -22,8 +25,14 @@ export default function Documents() {
   const [keyword, setKeyword] = useState('')
   const [filter, setFilter] = useState<FilterType>('all')
   const [sort, setSort] = useState<'updated' | 'title'>('updated')
+  const [showUpload, setShowUpload] = useState(false)
 
-  useEffect(() => {
+  const user = useAuthStore((s) => s.user)
+  const canUpload = isAdmin(user)
+
+  const load = () => {
+    setLoading(true)
+    setError(false)
     fetchDocuments()
       .then((d) => {
         setDocs(d)
@@ -33,6 +42,10 @@ export default function Documents() {
         setError(true)
         setLoading(false)
       })
+  }
+
+  useEffect(() => {
+    load()
   }, [])
 
   const filtered = useMemo(() => {
@@ -74,6 +87,16 @@ export default function Documents() {
           <option value="updated">最近更新</option>
           <option value="title">标题排序</option>
         </select>
+        {canUpload && (
+          <button className="btn-upload" onClick={() => setShowUpload(true)}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+            上传
+          </button>
+        )}
       </div>
 
       {loading ? (
@@ -88,6 +111,13 @@ export default function Documents() {
             <DocumentCard key={d.id} doc={d} />
           ))}
         </div>
+      )}
+
+      {showUpload && (
+        <UploadDialog
+          onClose={() => setShowUpload(false)}
+          onUploaded={() => load()}
+        />
       )}
     </div>
   )
