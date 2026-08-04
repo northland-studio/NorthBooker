@@ -64,7 +64,8 @@ export default function PageEditor() {
   const [versions, setVersions] = useState<PageVersion[]>([])
   const [versionsLoading, setVersionsLoading] = useState(false)
   const [restoreConfirmId, setRestoreConfirmId] = useState<number | null>(null)
-  const [ttsPlaying, setTtsPlaying] = useState(false)
+  const [ttsStatus, setTtsStatus] = useState<'idle' | 'synthesizing' | 'playing'>('idle')
+  const [ttsProgress, setTtsProgress] = useState(0)
   const [ttsEnabled, setTtsEnabled] = useState(true)
   const electronAPI = (window as any).electronAPI
   const isApp = !!electronAPI?.isElectron
@@ -283,6 +284,8 @@ export default function PageEditor() {
     electronAPI.getSettings().then((s: any) => {
       if (s?.tts) setTtsEnabled(s.tts.enabled !== false)
     })
+    // 合成进度
+    electronAPI.onTtsProgress?.((p: number) => setTtsProgress(p))
   }, [isApp])
 
   // TTS 停止朗读
@@ -290,7 +293,8 @@ export default function PageEditor() {
     if (window.speechSynthesis) window.speechSynthesis.cancel()
     try { ttsSourceRef.current?.stop() } catch {}
     ttsSourceRef.current = null
-    setTtsPlaying(false)
+    setTtsStatus('idle')
+    setTtsProgress(0)
   }, [])
 
   // 组件卸载时停止朗读
@@ -305,19 +309,23 @@ export default function PageEditor() {
 
   // TTS 朗读文档（从光标位置开始读）
   const handleTTS = async () => {
-    if (ttsPlaying) { stopTTS(); return }
+    if (ttsStatus !== 'idle') { stopTTS(); return }
     if (!editor) return
     const from = editor.state.selection.from
-    const text = editor.state.doc.textBetween(from, editor.state.doc.content.size, '\n')
+    let text = editor.state.doc.textBetween(from, editor.state.doc.content.size, '\n')
     if (!text.trim()) return
+    // 限制长度，避免合成时间过长
+    const MAX_LEN = 1500
+    if (text.length > MAX_LEN) text = text.slice(0, MAX_LEN)
     let ttsCfg = { enabled: true, speed: 0.9, model: 'edge' }
     if (isApp && electronAPI) {
       const s = await electronAPI.getSettings()
       ttsCfg = { ...ttsCfg, ...(s?.tts || {}) }
     }
-    // sherpa-onnx 本地合成
+    // sherpa-onnx 本地合成（异步，不阻塞主进程）
     if (isApp && ttsCfg.model !== 'edge') {
-      setTtsPlaying(true)
+      setTtsStatus('synthesizing')
+      setTtsProgress(0)
       try {
         const res = await electronAPI.ttsSynthesize({
           text,
@@ -332,8 +340,9 @@ export default function PageEditor() {
         const source = ctx.createBufferSource()
         source.buffer = buf
         source.connect(ctx.destination)
-        source.onended = () => { ttsSourceRef.current = null; setTtsPlaying(false) }
+        source.onended = () => { ttsSourceRef.current = null; setTtsStatus('idle'); setTtsProgress(0) }
         ttsSourceRef.current = source
+        setTtsStatus('playing')
         source.start()
       } catch {
         stopTTS()
@@ -344,9 +353,9 @@ export default function PageEditor() {
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = 'zh-CN'
     utterance.rate = Number(ttsCfg.speed) || 0.9
-    utterance.onend = () => setTtsPlaying(false)
-    utterance.onerror = () => setTtsPlaying(false)
-    setTtsPlaying(true)
+    utterance.onend = () => setTtsStatus('idle')
+    utterance.onerror = () => setTtsStatus('idle')
+    setTtsStatus('playing')
     window.speechSynthesis.speak(utterance)
   }
 
@@ -429,12 +438,12 @@ export default function PageEditor() {
         {/* TTS 朗读按钮（仅应用版可见） */}
         {isApp && ttsEnabled && (
           <button
-            className={`pe-btn ${ttsPlaying ? 'pe-btn--active' : ''}`}
+            className={`pe-btn ${ttsStatus !== 'idle' ? 'pe-btn--active' : ''}`}
             onClick={handleTTS}
-            title={ttsPlaying ? '停止朗读' : '朗读文档'}
+            title={ttsStatus === 'synthesizing' ? `合成中 ${ttsProgress}%` : ttsStatus === 'playing' ? '停止朗读' : '朗读文档'}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              {ttsPlaying ? (
+              {ttsStatus !== 'idle' ? (
                 <>
                   <rect x="6" y="4" width="4" height="16" />
                   <rect x="14" y="4" width="4" height="16" />

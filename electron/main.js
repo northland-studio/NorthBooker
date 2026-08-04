@@ -398,9 +398,13 @@ ipcMain.handle('tts-download-model', async (_, id) => {
     return { error: e.message || String(e) }
   }
 })
-ipcMain.handle('tts-synthesize', (_, { text, model, speed }) =>
-  tts.synthesize(String(text || ''), model, speed)
-)
+ipcMain.handle('tts-synthesize', async (_, { text, model, speed }) => {
+  // 限制单次朗读文本长度，避免合成时间过长
+  const limited = String(text || '').slice(0, 1500)
+  return await tts.synthesize(limited, model, speed, (percent) => {
+    mainWindow?.webContents.send('tts-progress', percent)
+  })
+})
 
 ipcMain.handle('load-cloud-font', async (_, { family, url }) => {
   if (!url) { injectFontCSS(''); return }

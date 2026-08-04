@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ttsDownloadModel: (id) => ipcRenderer.invoke('tts-download-model', id),
   ttsSynthesize: (opts) => ipcRenderer.invoke('tts-synthesize', opts),
   onTtsModelProgress: (cb) => ipcRenderer.on('tts-model-progress', (_, p) => cb(p)),
+  onTtsProgress: (cb) => ipcRenderer.on('tts-progress', (_, p) => cb(p)),
 
   // 更新
   checkUpdate: () => ipcRenderer.invoke('check-update'),

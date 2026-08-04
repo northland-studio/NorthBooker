@@ -140,7 +140,8 @@ function ensureSherpa() {
   if (!sherpa) sherpa = require('sherpa-onnx-node')
 }
 
-function initTts(id) {
+// 构建模型配置（自动探测 onnx 文件名与数据目录）
+function buildConfig(id) {
   const dir = getModelDir(id)
   const onnxFile = findOnnx(dir)
   if (!onnxFile) throw new Error('模型目录缺少 onnx 文件')
@@ -158,11 +159,16 @@ function initTts(id) {
   if (fs.existsSync(espeakDir)) vits.dictDir = espeakDir
   else if (fs.existsSync(dictDir)) vits.dataDir = dictDir
   else if (fs.existsSync(dataDir)) vits.dataDir = dataDir
-  const config = {
+  return {
     model: { vits, debug: false, numThreads: 2, provider: 'cpu' },
     maxNumSentences: 2,
   }
-  tts = new sherpa.OfflineTts(config)
+}
+
+async function initTts(id) {
+  const config = buildConfig(id)
+  // 异步创建：不阻塞主进程
+  tts = await sherpa.OfflineTts.createAsync(config)
   ttsModelId = id
 }
 
@@ -192,20 +198,30 @@ function encodeWav(samples, sampleRate) {
   return wav
 }
 
-// 合成文本 → { wav: base64 } 或 { error }
-function synthesize(text, modelId, speed) {
+// 合成文本 → { wav: base64 } 或 { error }（异步，不阻塞主进程）
+async function synthesize(text, modelId, speed, onProgress) {
   try {
     ensureSherpa()
     if (!isModelReady(modelId)) {
       return { error: '模型未就绪，请先在设置中下载' }
     }
-    if (!tts || ttsModelId !== modelId) initTts(modelId)
+    if (!tts || ttsModelId !== modelId) await initTts(modelId)
     const genCfg = new sherpa.GenerationConfig({
       sid: 0,
       speed: Number(speed) || 1.0,
       silenceScale: 0.2,
     })
-    const audio = tts.generate({ text, generationConfig: genCfg })
+    const audio = await tts.generateAsync({
+      text,
+      enableExternalBuffer: true,
+      generationConfig: genCfg,
+      onProgress: (p) => {
+        if (onProgress && p && typeof p.progress === 'number') {
+          onProgress(Math.max(1, Math.round(p.progress * 100)))
+        }
+        return 1
+      },
+    })
     if (!audio || !audio.samples || audio.samples.length === 0) {
       return { error: '合成失败：无音频输出' }
     }
