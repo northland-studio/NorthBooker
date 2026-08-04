@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/store/auth'
 import type { UserLevel } from '@/types/user'
@@ -15,18 +16,37 @@ export default function RequireLevel({
 }) {
   const { user, loading } = useAuthStore()
   const location = useLocation()
+  const [electronLoginPending, setElectronLoginPending] = useState(false)
+
+  // Electron 桌面端：打开默认浏览器登录，通过本地回调服务器接收 token
+  useEffect(() => {
+    const electronAPI = (window as any).electronAPI
+    if (!user && !loading && !electronLoginPending && electronAPI?.isElectron) {
+      setElectronLoginPending(true)
+      electronAPI.oauthLogin().then((token: string | null) => {
+        if (token) {
+          localStorage.setItem('nb_token', token)
+          window.location.reload()
+        } else {
+          setElectronLoginPending(false)
+        }
+      })
+    }
+  }, [user, loading, electronLoginPending])
 
   // 初始化中（若有 token 正在拉取用户）
   if (loading) {
     return <div className="documents-status">加载中...</div>
   }
 
-  // 未登录：跳转后端 /api/auth/login
+  // 未登录
   if (!user) {
     const isElectron = !!(window as any).electronAPI?.isElectron
+    if (isElectron) {
+      return <div className="documents-status">请在浏览器中完成登录，然后返回应用...</div>
+    }
     const redirect = encodeURIComponent(location.pathname + location.search)
-    const loginBase = isElectron ? 'https://northbooker.xuanjian.top/api/auth/login' : '/api/auth/login'
-    window.location.href = `${loginBase}?redirect=${redirect}`
+    window.location.href = `/api/auth/login?redirect=${redirect}`
     return <div className="documents-status">正在跳转登录...</div>
   }
 

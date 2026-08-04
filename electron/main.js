@@ -10,7 +10,6 @@ const SITE_URL = 'https://northbooker.xuanjian.top'
 const CDN_URL = 'https://cdn.northbooker.xuanjian.top/releases/'
 
 let mainWindow
-let authWindow
 let httpServer
 
 // 标题栏 HTML + CSS，注入到每个 index.html 中
@@ -198,33 +197,38 @@ ipcMain.handle('window-maximize', () => {
 ipcMain.handle('window-close', () => mainWindow?.close())
 ipcMain.handle('window-is-maximized', () => mainWindow?.isMaximized())
 
-// OAuth 登录
+// OAuth 登录：打开默认浏览器登录，本地回调服务器接收 token
 ipcMain.handle('oauth-login', async () => {
   return new Promise((resolve) => {
-    authWindow = new BrowserWindow({
-      width: 800, height: 700, title: '玄剑登录',
-      webPreferences: { nodeIntegration: false, contextIsolation: true }
-    })
-    authWindow.loadURL(SITE_URL + '/api/auth/login?redirect=electron')
-    authWindow.on('closed', () => { authWindow = null; resolve(null) })
-    authWindow.webContents.on('will-redirect', (event, url) => {
-      if (url.includes('/callback') || url.includes('access_token=')) {
-        event.preventDefault()
-        try {
-          const u = new URL(url)
-          const token = u.searchParams.get('access_token') || u.hash.replace('#access_token=', '')
-          if (token) { authWindow?.close(); resolve(token) }
-        } catch { authWindow?.close(); resolve(null) }
+    const callbackServer = http.createServer((req, res) => {
+      const reqUrl = url.parse(req.url, true)
+      if (reqUrl.pathname === '/auth/callback') {
+        const token = reqUrl.query.access_token
+        if (token) {
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' })
+          res.end('<!DOCTYPE html><html><head><meta charset="utf-8"><style>body{font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#1a1b1d;color:#fff}div{text-align:center}h2{color:#4ade80;font-size:24px;margin-bottom:8px}p{opacity:.7;font-size:16px}</style></head><body><div><h2>登录成功</h2><p>请返回北牖应用继续操作</p></div></body></html>')
+          callbackServer.close()
+          resolve(token)
+        } else {
+          res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' })
+          res.end('<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><h2>登录失败</h2></body></html>')
+          callbackServer.close()
+          resolve(null)
+        }
       }
     })
-    authWindow.webContents.on('did-navigate', (event, url) => {
-      if (url.includes('access_token=')) {
-        try {
-          const token = new URL(url).searchParams.get('access_token') || url.split('access_token=')[1]?.split('&')[0]
-          if (token) { authWindow?.close(); resolve(token) }
-        } catch {}
-      }
+
+    callbackServer.listen(0, '127.0.0.1', () => {
+      const port = callbackServer.address().port
+      console.log('[北牖-登录] 本地回调服务器已启动，端口:', port)
+      shell.openExternal(`${SITE_URL}/api/auth/login?redirect=http://127.0.0.1:${port}/auth/callback`)
     })
+
+    // 超时保护（5 分钟）
+    setTimeout(() => {
+      callbackServer.close()
+      resolve(null)
+    }, 5 * 60 * 1000)
   })
 })
 

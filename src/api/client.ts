@@ -48,10 +48,17 @@ client.interceptors.response.use(
       // 非登录/回调类的请求才跳转（避免死循环）
       const url = error.config?.url ?? ''
       if (!url.includes('/auth/') && !url.includes('/callback')) {
-        const loginUrl = isElectron
-          ? 'https://northbooker.xuanjian.top/api/auth/login?redirect=' + encodeURIComponent(window.location.href)
-          : '/api/auth/login?redirect=' + encodeURIComponent(window.location.pathname)
-        window.location.href = loginUrl
+        if (isElectron) {
+          const electronAPI = (window as any).electronAPI
+          electronAPI.oauthLogin().then((token: string | null) => {
+            if (token) {
+              localStorage.setItem('nb_token', token)
+              window.location.reload()
+            }
+          })
+        } else {
+          window.location.href = '/api/auth/login?redirect=' + encodeURIComponent(window.location.pathname)
+        }
       }
     }
     return Promise.reject(error)

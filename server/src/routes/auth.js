@@ -109,6 +109,18 @@ router.get('/callback', async (req, res) => {
   // 拉取一次用户信息，便于前端立即展示（可选）
   const xjUser = await verifyXuanjianToken(accessToken)
 
+  // Electron 桌面端：redirect 指向本地回调服务器时，用 query 参数传 token
+  // （URL fragment 不会发送到服务器，本地 HTTP 服务器无法读取）
+  if (redirect.startsWith('http://127.0.0.1') || redirect.startsWith('http://localhost')) {
+    const callbackUrl = new URL(redirect)
+    callbackUrl.searchParams.set('access_token', accessToken)
+    if (xjUser) {
+      callbackUrl.searchParams.set('username', xjUser.username)
+      callbackUrl.searchParams.set('level', String(xjUser.level || 0))
+    }
+    return res.redirect(callbackUrl.toString())
+  }
+
   // 通过 URL fragment 传递 token（# 后不会发到服务器日志）
   // 前端 /callback 页面解析 hash 后写入 localStorage
   const fragment = new URLSearchParams()

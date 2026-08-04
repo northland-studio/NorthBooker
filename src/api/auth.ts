@@ -19,7 +19,16 @@ export async function logout(): Promise<void> {
 // 跳转到玄剑官网授权登录
 // redirect 为登录成功后回跳的前端路径
 export function redirectToLogin(redirect = window.location.pathname + window.location.search): void {
-  const isElectron = !!(window as any).electronAPI?.isElectron
-  const loginBase = isElectron ? 'https://northbooker.xuanjian.top/api/auth/login' : '/api/auth/login'
-  window.location.href = `${loginBase}?redirect=${encodeURIComponent(redirect)}`
+  const electronAPI = (window as any).electronAPI
+  // Electron 桌面端：打开默认浏览器登录，通过本地回调服务器接收 token
+  if (electronAPI?.isElectron) {
+    electronAPI.oauthLogin().then((token: string | null) => {
+      if (token) {
+        localStorage.setItem('nb_token', token)
+        window.location.reload()
+      }
+    })
+    return
+  }
+  window.location.href = `/api/auth/login?redirect=${encodeURIComponent(redirect)}`
 }
