@@ -28,6 +28,8 @@ jobs:
 
       - name: Build Electron app (Windows)
         working-directory: electron
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win
 
       - name: Get version
