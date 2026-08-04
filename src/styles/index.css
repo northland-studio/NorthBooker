@@ -1690,6 +1690,34 @@ button {
   margin: 4px 6px;
 }
 
+/* 右键子菜单（移动至...） */
+.ctx-submenu {
+  max-height: 200px;
+  overflow-y: auto;
+  border-left: 2px solid var(--color-primary);
+  margin-left: 6px;
+  padding-left: 4px;
+}
+
+.ctx-submenu-empty {
+  padding: 6px 14px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+/* 拖拽悬停高亮 */
+.doc-list-row--drop {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+  background: rgba(0, 74, 173, 0.06);
+}
+
+.doc-card-wrapper--drop {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+  border-radius: 12px;
+}
+
 .btn-ghost {
   padding: 8px 16px;
   border-radius: 10px;

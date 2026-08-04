@@ -29,6 +29,7 @@ interface ContextMenuState {
   type: 'doc' | 'folder' | 'empty'
   id: string
   title: string
+  moveToOpen?: boolean
 }
 
 const FILTERS: { value: FilterType; label: string }[] = [
@@ -66,6 +67,9 @@ export default function Documents() {
 
   // 右键菜单
   const [ctxMenu, setCtxMenu] = useState<ContextMenuState | null>(null)
+
+  // 拖拽悬停高亮
+  const [dragOverFolder, setDragOverFolder] = useState<string | null>(null)
 
   const user = useAuthStore((s) => s.user)
   const canUpload = isAdmin(user)
@@ -231,6 +235,16 @@ export default function Documents() {
     e.dataTransfer.dropEffect = 'move'
   }
 
+  const handleDragEnterFolder = (e: React.DragEvent, folderId: string) => {
+    e.preventDefault()
+    setDragOverFolder(folderId)
+  }
+
+  const handleDragLeaveFolder = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOverFolder(null)
+  }
+
   const handleDropOnFolder = async (e: React.DragEvent, folderId: string) => {
     e.preventDefault()
     const docId = e.dataTransfer.getData('text/plain')
@@ -353,11 +367,13 @@ export default function Documents() {
           {showFolders && filteredFolders.map((f, fi) => (
             <div
               key={f.id}
-              className={`doc-list-row ${focusIndex === fi ? 'doc-list-row--focus' : ''}`}
+              className={`doc-list-row${focusIndex === fi ? ' doc-list-row--focus' : ''}${dragOverFolder === f.id ? ' doc-list-row--drop' : ''}`}
               onClick={() => enterFolder(f)}
               onContextMenu={(e) => handleContextMenu(e, 'folder', f.id, f.name)}
               onDragOver={handleDragOver}
-              onDrop={(e) => handleDropOnFolder(e, f.id)}
+              onDragEnter={(e) => handleDragEnterFolder(e, f.id)}
+              onDragLeave={handleDragLeaveFolder}
+              onDrop={(e) => { handleDropOnFolder(e, f.id); setDragOverFolder(null) }}
             >
               <div className="doc-list-cell doc-list-cell--name" style={{ cursor: 'pointer' }}>
                 <span className="doc-list-thumb doc-list-thumb--icon">
@@ -383,7 +399,7 @@ export default function Documents() {
                 draggable
                 onDragStart={(e) => handleDragStart(e, d.id)}
               >
-                <Link to={`/viewer/${d.id}`} className="doc-list-cell doc-list-cell--name"
+                <Link to={`/viewer/${d.id}`} className="doc-list-cell doc-list-cell--name" draggable={false}
                   onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); handleContextMenu(e, 'doc', d.id, d.title) }}>
                   {d.type === 'image' ? (
                     <img className="doc-list-thumb" src={resolveUri(d.uri)} alt={d.title} />
@@ -404,7 +420,11 @@ export default function Documents() {
         <div className="doc-grid">
           {showFolders && filteredFolders.map((f) => (
             <div key={f.id} onContextMenu={(e) => handleContextMenu(e, 'folder', f.id, f.name)}
-              onDragOver={handleDragOver} onDrop={(e) => handleDropOnFolder(e, f.id)}>
+              className={dragOverFolder === f.id ? 'doc-card-wrapper doc-card-wrapper--drop' : ''}
+              onDragOver={handleDragOver}
+              onDragEnter={(e) => handleDragEnterFolder(e, f.id)}
+              onDragLeave={handleDragLeaveFolder}
+              onDrop={(e) => { handleDropOnFolder(e, f.id); setDragOverFolder(null) }}>
               <FolderCard folder={f} onClick={() => enterFolder(f)} />
             </div>
           ))}
@@ -436,6 +456,28 @@ export default function Documents() {
               <button className="ctx-menu-item" onClick={() => { handleShareDoc({ id: ctxMenu.id, title: ctxMenu.title } as Document); closeCtxMenu() }}>
                 分享
               </button>
+              <div className="ctx-menu-sep" />
+              <button className="ctx-menu-item" onClick={() => {
+                setCtxMenu({ ...ctxMenu, moveToOpen: !ctxMenu.moveToOpen })
+              }}>
+                移动至 ▸
+              </button>
+              {ctxMenu.moveToOpen && (
+                <div className="ctx-submenu">
+                  {folders.length === 0 ? (
+                    <div className="ctx-submenu-empty">暂无文件夹</div>
+                  ) : (
+                    folders.map((f) => (
+                      <button key={f.id} className="ctx-menu-item" onClick={async () => {
+                        try { await moveDocument(ctxMenu.id, f.id); load(); closeCtxMenu() }
+                        catch {}
+                      }}>
+                        {f.name}
+                      </button>
+                    ))
+                  )}
+                </div>
+              )}
               {canUpload && (
                 <>
                   <div className="ctx-menu-sep" />

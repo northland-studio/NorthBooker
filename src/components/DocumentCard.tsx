@@ -8,10 +8,10 @@ import BookmarkButton from './BookmarkButton'
 export default function DocumentCard({ doc }: { doc: Document }) {
   return (
     <div className="doc-card-wrapper">
-      <Link to={`/viewer/${doc.id}`} className="doc-card">
+      <Link to={`/viewer/${doc.id}`} className="doc-card" draggable={false}>
         <div className="doc-card-thumb">
           {doc.type === 'image' ? (
-            <img src={doc.uri} alt={doc.title} loading="lazy" />
+            <img src={doc.uri} alt={doc.title} loading="lazy" draggable={false} />
           ) : (
             <FileTypeIcon type={doc.type} />
           )}

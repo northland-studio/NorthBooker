@@ -60,6 +60,9 @@ jobs:
           npm install qiniu
           $exe = Get-ChildItem dist -Filter *.exe | Select-Object -First 1
           $yml = Get-ChildItem dist -Filter latest.yml | Select-Object -First 1
+          $env:EXE_PATH = $exe.FullName
+          $env:EXE_NAME = $exe.Name
+          $env:YML_PATH = $yml.FullName
           node -e "
             const qiniu = require('qiniu')
             const fs = require('fs')
@@ -80,8 +83,8 @@ jobs:
               })
             }
             (async () => {
-              await upload('$($exe.FullName)', 'releases/' + '$($exe.Name)')
-              await upload('$($yml.FullName)', 'releases/latest.yml')
+              await upload(process.env.EXE_PATH, 'releases/' + process.env.EXE_NAME)
+              await upload(process.env.YML_PATH, 'releases/latest.yml')
               console.log('CDN 源部署完成')
             })()
           "
