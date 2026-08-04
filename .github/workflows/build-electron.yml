@@ -5,6 +5,11 @@ on:
     branches: [main]
     paths:
       - 'electron/**'
+      - 'src/**'
+      - 'package.json'
+      - 'vite.config.ts'
+      - 'tsconfig*.json'
+      - 'index.html'
       - '.github/workflows/build-electron.yml'
   workflow_dispatch:
 
@@ -22,7 +27,14 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install dependencies
+      - name: Build frontend & copy to Electron
+        run: |
+          npm install
+          npm run build
+          if (Test-Path electron/renderer-dist) { Remove-Item -Recurse -Force electron/renderer-dist }
+          Copy-Item -Recurse dist electron/renderer-dist
+
+      - name: Install Electron dependencies
         working-directory: electron
         run: npm install
 
