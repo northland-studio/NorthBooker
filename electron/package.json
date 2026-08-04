@@ -1,6 +1,6 @@
 {
   "name": "northbooker-desktop",
-  "version": "2.4.1",
+  "version": "2.5.0",
   "description": "北牖 NorthBooker 桌面版 - 云端文档查看与在线协作",
   "author": "北域工作室 <morzane_work@foxmail.com>",
   "license": "MIT",
@@ -29,9 +29,22 @@
       "main.js",
       "preload.js",
       "tts.js",
+      "tts-worker.js",
       "renderer-dist/",
       "icon.png",
       "package.json"
+    ],
+    "asarUnpack": [
+      "tts-worker.js",
+      "node_modules/sherpa-onnx-node/**",
+      "node_modules/sherpa-onnx-win-x64/**",
+      "node_modules/sherpa-onnx-win-ia32/**"
+    ],
+    "extraResources": [
+      {
+        "from": "node-runtime/node.exe",
+        "to": "node/node.exe"
+      }
     ],
     "publish": {
       "provider": "github",

@@ -38,6 +38,18 @@ jobs:
         working-directory: electron
         run: npm install
 
+      - name: Download Node runtime for TTS (node.exe)
+        working-directory: electron
+        run: |
+          New-Item -ItemType Directory -Force node-runtime | Out-Null
+          $version = "v22.15.0"
+          $zip = "node-$version-win-x64.zip"
+          Invoke-WebRequest "https://nodejs.org/dist/$version/$zip" -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath node-tmp
+          Copy-Item "node-tmp/node-$version-win-x64/node.exe" "node-runtime/node.exe"
+          Remove-Item -Recurse -Force node-tmp, $zip
+          node -e "const fs=require('fs'); if(!fs.existsSync('node-runtime/node.exe')) process.exit(1); console.log('node.exe ready:', fs.statSync('node-runtime/node.exe').size, 'bytes')"
+
       - name: Build Electron app (Windows)
         working-directory: electron
         env:

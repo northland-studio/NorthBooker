@@ -1,6 +1,9 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useEditor, EditorContent } from '@tiptap/react'
+import { Extension } from '@tiptap/core'
+import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import Underline from '@tiptap/extension-underline'
@@ -38,6 +41,114 @@ interface PageVersion {
   isRollback?: boolean
 }
 
+// ===== TTS 朗读高亮工具（与 electron/tts.js 切分规则保持一致） =====
+// 按句号/逗号/分号/换行切分文本为段落（每段约 20~200 字），返回段落文本及在原文中的起始偏移
+function splitTextSegments(text: string): { text: string; start: number }[] {
+  const segments: { text: string; start: number }[] = []
+  let cur = ''
+  let curStart = 0
+  let i = 0
+  for (const ch of String(text || '')) {
+    if (!cur) curStart = i
+    cur += ch
+    if (/[。！？；，、\n]/.test(ch) && cur.trim().length >= 20) {
+      segments.push({ text: cur.trim(), start: curStart })
+      cur = ''
+    } else if (cur.trim().length >= 200) {
+      segments.push({ text: cur.trim(), start: curStart })
+      cur = ''
+    }
+    i++
+  }
+  if (cur.trim()) segments.push({ text: cur.trim(), start: curStart })
+  return segments.filter((s) => s.text.length > 0)
+}
+
+// 判断文本是否含足够中文（与主进程 hasChinese 一致）
+function hasChineseText(text: string): boolean {
+  const zh = (text.match(/[\u4e00-\u9fff]/g) || []).length
+  return zh >= 10 || zh / Math.max(text.length, 1) >= 0.2
+}
+
+// 模拟 prosemirror textBetween(blockSeparator='\n') 遍历 doc，
+// 返回拼接文本与每个字符的 { offset → pos } 映射（块分隔符映射到块起始 pos）
+function buildTextMap(doc: any, from: number, to: number): { text: string; map: { off: number; pos: number }[] } {
+  const map: { off: number; pos: number }[] = []
+  let text = ''
+  let separated = true
+  const sep = '\n'
+  doc.nodesBetween(from, to, (node: any, pos: number) => {
+    if (node.isText) {
+      const t = node.text || ''
+      for (let i = 0; i < t.length; i++) {
+        map.push({ off: text.length, pos: pos + i })
+        text += t[i]
+      }
+      separated = false
+    } else if (node.isBlock && !separated) {
+      map.push({ off: text.length, pos })
+      text += sep
+      separated = true
+    }
+    return true
+  })
+  return { text, map }
+}
+
+// 将段落 [start, end)（textBetween 文本偏移）映射为文档 pos 范围
+function segmentToPosRange(map: { off: number; pos: number }[], start: number, end: number): { from: number; to: number } | null {
+  let from: number | null = null
+  let to: number | null = null
+  for (const item of map) {
+    if (item.off >= start && from === null) from = item.pos
+    if (item.off >= end && to === null) to = item.pos + 1
+    if (from !== null && to !== null) break
+  }
+  if (from === null) from = map[0]?.pos ?? 0
+  if (to === null) to = (map[map.length - 1]?.pos ?? from) + 1
+  return { from, to }
+}
+
+// ===== TTS 朗读高亮 Decoration 插件（模块级状态，供所有编辑器实例共享） =====
+// 高亮当前朗读段落：inline decoration 不能跨文本块，故按文本节点拆分为多个
+let ttsHighlightRanges: { from: number; to: number }[] = []
+
+const ttsHighlightPlugin = new Plugin({
+  key: new PluginKey('ttsHighlight'),
+  state: {
+    init: () => DecorationSet.empty,
+    apply(tr, set) {
+      if (tr.getMeta('ttsHighlight') !== undefined) {
+        if (!ttsHighlightRanges.length) return DecorationSet.empty
+        const decos: Decoration[] = []
+        for (const r of ttsHighlightRanges) {
+          tr.doc.nodesBetween(r.from, r.to, (node: any, pos: number) => {
+            if (!node.isText) return true
+            const nFrom = Math.max(r.from, pos)
+            const nTo = Math.min(r.to, pos + node.nodeSize)
+            if (nTo > nFrom) decos.push(Decoration.inline(nFrom, nTo, { class: 'tts-reading-highlight' }))
+            return true
+          })
+        }
+        return DecorationSet.create(tr.doc, decos)
+      }
+      return set.map(tr.mapping, tr.doc)
+    },
+  },
+  props: {
+    decorations(state) {
+      return this.getState(state)
+    },
+  },
+})
+
+const ttsHighlightExtension = Extension.create({
+  name: 'ttsHighlight',
+  addProseMirrorPlugins() {
+    return [ttsHighlightPlugin]
+  },
+})
+
 // 在线文档编辑器
 export default function PageEditor() {
   const { id } = useParams<{ id: string }>()
@@ -72,10 +183,13 @@ export default function PageEditor() {
   const isApp = !!electronAPI?.isElectron
   const audioCtxRef = useRef<AudioContext | null>(null)
   const ttsSourceRef = useRef<AudioBufferSourceNode | null>(null)
-  const audioQueueRef = useRef<string[]>([])
+  const audioQueueRef = useRef<{ wav: string; index: number }[]>([])
   const playingRef = useRef(false)
   const stopRef = useRef(false)
   const synthDoneRef = useRef(false)
+  // TTS 朗读高亮：当前朗读段落（与主进程切分一致）+ 文档起始位置
+  const ttsSegmentsRef = useRef<{ text: string; start: number }[]>([])
+  const ttsStartPosRef = useRef(0)
   const saveTimer = useRef<ReturnType<typeof setTimeout>>()
   // 用 ref 解决 useCallback 闭包陷阱：scheduleSave（空依赖）调用的 doSave 需要最新的状态
   const titleRef = useRef(title)
@@ -99,6 +213,7 @@ export default function PageEditor() {
       TableRow,
       TableCell,
       TableHeader,
+      ttsHighlightExtension,
     ],
     onUpdate: ({ editor: ed }) => {
       scheduleSave()
@@ -292,7 +407,7 @@ export default function PageEditor() {
     // 流式分段：收到合成段落即入队播放
     electronAPI.onTtsChunk?.((chunk: { index: number; wav?: string; error?: string }) => {
       if (stopRef.current || !chunk.wav) return
-      audioQueueRef.current.push(chunk.wav)
+      audioQueueRef.current.push({ wav: chunk.wav, index: chunk.index })
       if (!playingRef.current) playNextRef.current()
     })
     // 合成状态
@@ -317,22 +432,54 @@ export default function PageEditor() {
     })
   }, [isApp])
 
+  // 高亮当前朗读段落并滚动到可视区
+  const highlightSegment = useCallback((index: number) => {
+    if (!editor) return
+    const seg = ttsSegmentsRef.current[index]
+    if (!seg) return
+    const doc = editor.state.doc
+    const startPos = ttsStartPosRef.current
+    const { text, map } = buildTextMap(doc, startPos, doc.content.size)
+    if (!text) return
+    const segStart = seg.start
+    const segEnd = segStart + seg.text.length
+    const range = segmentToPosRange(map, segStart, segEnd)
+    if (!range) return
+    ttsHighlightRanges = [{ from: range.from, to: range.to }]
+    editor.view.dispatch(editor.state.tr.setMeta('ttsHighlight', true))
+    // 滚动到当前段落
+    try {
+      const dom = editor.view.domAtPos(range.from)
+      const el = dom.node.nodeType === 3 ? dom.node.parentElement : (dom.node as HTMLElement)
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    } catch {
+      // ignore
+    }
+  }, [editor])
+
+  // 清除朗读高亮
+  const clearHighlight = useCallback(() => {
+    ttsHighlightRanges = []
+    if (editor) editor.view.dispatch(editor.state.tr.setMeta('ttsHighlight', true))
+  }, [editor])
+
   // 逐段播放队列
   const playNext = useCallback(async () => {
     if (stopRef.current) return
-    const wav = audioQueueRef.current.shift()
-    if (!wav) {
+    const item = audioQueueRef.current.shift()
+    if (!item) {
       playingRef.current = false
-      if (synthDoneRef.current) { setTtsStatus('idle'); setTtsProgress(0) }
+      if (synthDoneRef.current) { setTtsStatus('idle'); setTtsProgress(0); clearHighlight() }
       return
     }
     playingRef.current = true
     setTtsStatus('playing')
+    highlightSegment(item.index)
     try {
       if (!audioCtxRef.current) audioCtxRef.current = new AudioContext()
       const ctx = audioCtxRef.current
       await ctx.resume()
-      const buf = await ctx.decodeAudioData(base64ToArrayBuffer(wav))
+      const buf = await ctx.decodeAudioData(base64ToArrayBuffer(item.wav))
       const source = ctx.createBufferSource()
       source.buffer = buf
       source.connect(ctx.destination)
@@ -342,7 +489,7 @@ export default function PageEditor() {
     } catch {
       playNext()
     }
-  }, [])
+  }, [highlightSegment, clearHighlight])
 
   // TTS 停止朗读
   const stopTTS = useCallback(() => {
@@ -353,10 +500,12 @@ export default function PageEditor() {
     audioQueueRef.current = []
     playingRef.current = false
     synthDoneRef.current = false
+    ttsSegmentsRef.current = []
+    clearHighlight()
     electronAPI?.ttsStop?.()
     setTtsStatus('idle')
     setTtsProgress(0)
-  }, [])
+  }, [clearHighlight])
 
   const playNextRef = useRef(playNext)
   playNextRef.current = playNext
@@ -380,7 +529,7 @@ export default function PageEditor() {
     const from = editor.state.selection.from
     const text = editor.state.doc.textBetween(from, editor.state.doc.content.size, '\n')
     if (!text.trim()) return
-    let ttsCfg = { enabled: true, speed: 0.9, model: 'edge' }
+    let ttsCfg = { enabled: true, speed: 0.9, model: 'edge', sid: 0 }
     if (isApp && electronAPI) {
       const s = await electronAPI.getSettings()
       ttsCfg = { ...ttsCfg, ...(s?.tts || {}) }
@@ -391,17 +540,24 @@ export default function PageEditor() {
       audioQueueRef.current = []
       playingRef.current = false
       synthDoneRef.current = false
+      // 记录朗读起始位置与切分段落（与主进程规则一致，用于高亮+滚动）
+      ttsStartPosRef.current = from
+      ttsSegmentsRef.current = splitTextSegments(text).filter((s) => hasChineseText(s.text))
+      clearHighlight()
       setTtsStatus('synthesizing')
       setTtsProgress(0)
       const res = await electronAPI.ttsStart({
         text,
         model: ttsCfg.model,
         speed: Number(ttsCfg.speed) || 1.0,
+        sid: Number(ttsCfg.sid) || 0,
       })
       // 内容不含中文（中文模型无法朗读英文）时提示切换模型
       if (res?.error) {
         setTtsStatus('idle')
         setTtsProgress(0)
+        ttsSegmentsRef.current = []
+        clearHighlight()
         alert(res.error)
       }
       return

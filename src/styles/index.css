@@ -2951,6 +2951,17 @@ button {
   cursor: default;
 }
 
+/* TTS 朗读当前句子高亮 */
+.tts-reading-highlight {
+  background: rgba(0, 74, 173, 0.18);
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(0, 74, 173, 0.25);
+}
+body.dark .tts-reading-highlight {
+  background: rgba(0, 122, 255, 0.28);
+  box-shadow: 0 0 0 1px rgba(0, 122, 255, 0.35);
+}
+
 /* ProseMirror / Tiptap 编辑器样式 */
 .ProseMirror {
   outline: none;

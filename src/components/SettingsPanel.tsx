@@ -6,7 +6,7 @@ interface Settings {
   minimizeToTray: boolean
   fonts: { ui: string; title: string; content: string }
   themeColor: string
-  tts?: { enabled: boolean; speed: number; model: string }
+  tts?: { enabled: boolean; speed: number; model: string; sid: number }
 }
 
 interface CloudFont {
@@ -18,6 +18,7 @@ interface CloudFont {
 interface TtsModel {
   id: string
   name: string
+  speakers?: number
 }
 
 type UpdateStatus = 'idle' | 'checking' | 'no-update' | 'found' | 'error'
@@ -83,12 +84,16 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
   }
 
   const updateTts = (key: string, value: any) => {
-    const ttsCfg = { enabled: true, speed: 0.9, model: 'edge', ...(settings!.tts || {}) }
+    const ttsCfg = { enabled: true, speed: 0.9, model: 'edge', sid: 0, ...(settings!.tts || {}) }
     const nextTts = { ...ttsCfg, [key]: value }
     setSettings({ ...settings!, tts: nextTts })
     api.setSetting('tts', nextTts)
     if (key === 'model') refreshModelStatus()
   }
+
+  // 当前模型支持的音色数（仅离线模型且已下载时展示）
+  const currentModel = ttsModels.find((m) => m.id === settings?.tts?.model)
+  const speakerCount = currentModel?.speakers && currentModel.speakers > 1 ? currentModel.speakers : 0
 
   const handleDownloadModel = async () => {
     const model = settings?.tts?.model
@@ -318,6 +323,19 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
               ))}
             </select>
           </div>
+          {speakerCount > 0 && (
+            <div className="settings-row">
+              <label>音色</label>
+              <select
+                value={settings.tts?.sid ?? 0}
+                onChange={(e) => updateTts('sid', parseInt(e.target.value, 10))}
+              >
+                {Array.from({ length: speakerCount }, (_, i) => (
+                  <option key={i} value={i}>音色 {i + 1}</option>
+                ))}
+              </select>
+            </div>
+          )}
           {settings.tts?.model && settings.tts.model !== 'edge' && (
             <div className="settings-tts-model">
               {ttsModelStatus === 'ready' && (

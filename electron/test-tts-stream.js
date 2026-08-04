@@ -50,7 +50,7 @@ async function main() {
   const chunks = []
   const states = []
   const t0 = Date.now()
-  const res = await tts.startStream(text, 'aishell3', 1.0, {
+  const res = await tts.startStream(text, 'aishell3', 1.0, 5, {
     onChunk: (c) => {
       chunks.push(c)
       console.log(`  chunk[${c.index}] ${c.wav ? 'wav ' + (c.wav.length / 1024).toFixed(0) + 'KB' : 'err: ' + c.error}`)

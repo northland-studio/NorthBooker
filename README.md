@@ -57,6 +57,7 @@
 - 全文搜索：跨在线文档 FTS5 索引 + 实时高亮
 - 缩略图预览：PDF/Office 文件自动生成缩略图
 - 标记读取：TTS 语音朗读在线文档（Edge 内置 / sherpa-onnx 离线音色模型，支持点哪从哪读）
+- 朗读体验：离线模型 174 种音色可切换，朗读时高亮当前句子并跟随滚动
 - 批量操作：多选移动、删除文档 + 在线文档多选批量删除
 - 右键菜单：文档列表 + 在线文档列表支持右键操作
 - 文档版本历史：自动快照 + 回滚
@@ -112,9 +113,12 @@ northbooker/
 │   │   └── qiniu.js           # 七牛对象存储配置
 │   ├── data/                  # SQLite 数据库目录
 │   └── .env.example
-├── electron/                  # Electron 桌面版（v2.0.0 内置前端架构）
+├── electron/                  # Electron 桌面版（v2.5.0 内置前端架构）
 │   ├── main.js                # Electron 主进程
 │   ├── preload.js             # 预加载脚本（contextBridge）
+│   ├── tts.js                 # TTS 离线合成（段落切分 + node.exe 子进程池）
+│   ├── tts-worker.js          # TTS 推理子进程（sherpa-onnx）
+│   ├── release-notes.json     # 更新说明（同步到 CDN）
 │   ├── renderer/              # 内置前端（自定义标题栏 + 侧边导航）
 │   │   ├── index.html
 │   │   ├── style.css

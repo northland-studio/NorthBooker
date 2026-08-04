@@ -3,6 +3,18 @@
 本文件记录北牖（NorthBooker）项目的版本演进与变更内容。
 发布单位：北域工作室（Northland Studio）
 
+## v2.5.0 (Electron) — 2026-08-05
+
+### 修复
+
+- **修复**：离线 TTS 朗读始终失败（External buffers are not allowed）— 根因是 Electron 内置 V8 禁止创建 Node-API external buffer，与进程模式（主进程 / worker / ELECTRON_RUN_AS_NODE fork）无关；现改为打包附带 node.exe，用独立 Node 子进程执行 sherpa-onnx 推理，通过 IPC 回传音频
+- **修复**：打包环境缺少 TTS 运行时 — CI 自动下载 node.exe 并随安装包分发，worker 脚本与原生模块 asarUnpack 解包
+
+### 新增
+
+- **功能**：离线模型音色切换 — AIShell3 支持 174 种音色，设置面板新增音色下拉选择
+- **功能**：朗读句子高亮 — TTS 朗读时高亮当前句子并自动跟随滚动内容
+
 ## v2.4.1 (Electron) — 2026-08-04
 
 ### 新增

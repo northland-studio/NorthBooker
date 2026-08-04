@@ -25,7 +25,7 @@ const store = new Store({
     minimizeToTray: true,
     fonts: { ui: '', title: '', content: '' },
     themeColor: '#004AAD',
-    tts: { enabled: true, speed: 0.9, model: 'edge' },
+    tts: { enabled: true, speed: 0.9, model: 'edge', sid: 0 },
   },
 })
 
@@ -384,7 +384,7 @@ ipcMain.handle('get-cloud-fonts', () => CLOUD_FONTS)
 
 // ===== TTS 朗读 IPC =====
 ipcMain.handle('tts-get-models', () =>
-  tts.TTS_MODELS.map(({ id, name }) => ({ id, name }))
+  tts.TTS_MODELS.map(({ id, name, speakers }) => ({ id, name, speakers }))
 )
 ipcMain.handle('tts-model-status', (_, id) => tts.isModelReady(id))
 ipcMain.handle('tts-download-model', async (_, id) => {
@@ -398,8 +398,8 @@ ipcMain.handle('tts-download-model', async (_, id) => {
     return { error: e.message || String(e) }
   }
 })
-ipcMain.handle('tts-start', async (_, { text, model, speed }) => {
-  return await tts.startStream(String(text || ''), model, speed, {
+ipcMain.handle('tts-start', async (_, { text, model, speed, sid }) => {
+  return await tts.startStream(String(text || ''), model, speed, sid, {
     onChunk: (chunk) => mainWindow?.webContents.send('tts-chunk', chunk),
     onState: (state) => mainWindow?.webContents.send('tts-state', state),
     onError: (err) => mainWindow?.webContents.send('tts-error', err),

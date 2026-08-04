@@ -15,6 +15,7 @@ const TTS_MODELS = [
   {
     id: 'aishell3',
     name: 'AIShell3（中文多音色）',
+    speakers: 174,
     urls: [
       'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-zh-aishell3.tar.bz2',
       CDN_PROXY + 'vits-zh-aishell3.tar.bz2',
@@ -157,15 +158,37 @@ function buildConfig(id) {
   }
 }
 
-// ===== 流式分段合成（主进程同步推理 + 分段让出事件循环） =====
+// ===== 流式分段合成（child_process.fork 子进程池 + 并行预合成） =====
 // 说明：sherpa-onnx-node 的 generate() 返回音频依赖 Node-API external buffer，
-// Node-API 禁止在 worker 线程创建 external buffer（报 "External buffers are not allowed"），
-// 异步 API（createAsync/generateAsync）在 Electron 下 promise 也不 resolve。
-// 因此只能在主进程同步 generate：每段合成 1~3 秒阻塞主进程，
-// 但播放发生在渲染进程（AudioContext），不受影响；段间 setImmediate 让出事件循环。
-const sherpa = require('sherpa-onnx-node')
+// Electron 内置 V8 禁止创建 external buffer（主进程 / worker / ELECTRON_RUN_AS_NODE 均受限），
+// 只有真正的 node.exe 才允许。因此 fork 时必须显式指定 execPath 为 node.exe，
+// 子进程在纯 Node 环境执行推理，通过 IPC 回传 wav；多个子进程并行，主进程不阻塞。
+const { fork } = require('child_process')
 
 let streamState = null
+let workerSeq = 0
+
+// 定位可用的 node.exe：优先打包附带的 resources/node/node(.exe)，其次系统 PATH 中的 node
+function findNodeExe() {
+  const bundled =
+    process.resourcesPath &&
+    path.join(process.resourcesPath, 'node', process.platform === 'win32' ? 'node.exe' : 'node')
+  if (bundled && fs.existsSync(bundled)) return bundled
+  try {
+    const out = execFileSync(process.platform === 'win32' ? 'where' : 'which', ['node'], { encoding: 'utf8' })
+    const exe = out.trim().split(/\r?\n/)[0]
+    if (exe && fs.existsSync(exe)) return exe
+  } catch {}
+  return process.execPath // 兜底（Electron 下会失败，但至少不崩）
+}
+
+// worker 脚本路径：dev 在 __dirname；打包后 tts-worker.js 被 asarUnpack 到 app.asar.unpacked
+function workerScriptPath() {
+  if (app.isPackaged && process.resourcesPath) {
+    return path.join(process.resourcesPath, 'app.asar.unpacked', 'tts-worker.js')
+  }
+  return path.join(__dirname, 'tts-worker.js')
+}
 
 // 按句号/逗号/分号/换行切分文本为段落（每段约 20~200 字）
 function splitText(text) {
@@ -191,34 +214,42 @@ function hasChinese(text) {
   return zh >= 10 || zh / Math.max(text.length, 1) >= 0.2
 }
 
-// Float32 PCM → WAV Buffer
-function encodeWav(samples, sampleRate) {
-  const pcm = new Int16Array(samples.length)
-  for (let i = 0; i < samples.length; i++) {
-    const s = Math.max(-1, Math.min(1, samples[i]))
-    pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff
-  }
-  const dataSize = pcm.length * 2
-  const wav = Buffer.alloc(44 + dataSize)
-  wav.write('RIFF', 0)
-  wav.writeUInt32LE(36 + dataSize, 4)
-  wav.write('WAVE', 8)
-  wav.write('fmt ', 12)
-  wav.writeUInt32LE(16, 16)
-  wav.writeUInt16LE(1, 20)
-  wav.writeUInt16LE(1, 22)
-  wav.writeUInt32LE(sampleRate, 24)
-  wav.writeUInt32LE(sampleRate * 2, 28)
-  wav.writeUInt16LE(2, 32)
-  wav.writeUInt16LE(16, 34)
-  wav.write('data', 36)
-  wav.writeUInt32LE(dataSize, 40)
-  Buffer.from(pcm.buffer).copy(wav, 44)
-  return wav
+function createWorker(config) {
+  return new Promise((resolve, reject) => {
+    const child = fork(workerScriptPath(), [], {
+      execPath: findNodeExe(),
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+    })
+    const timer = setTimeout(() => { child.kill(); reject(new Error('模型加载超时')) }, 60000)
+    child.on('message', (m) => {
+      if (m && m.type === 'ready') {
+        clearTimeout(timer)
+        if (m.error) reject(new Error(m.error))
+        else resolve(child)
+      }
+    })
+    child.on('error', (e) => { clearTimeout(timer); reject(e) })
+    child.send({ type: 'init', config })
+  })
 }
 
-// 开始流式朗读：切分段落 → 主进程同步逐段合成 → 按序推送 chunk
-async function startStream(text, modelId, speed, handlers) {
+function synthInWorker(child, text, speed, sid) {
+  return new Promise((resolve) => {
+    const id = ++workerSeq
+    const onMsg = (m) => {
+      if (m && m.type === 'result' && m.id === id) {
+        child.off('message', onMsg)
+        resolve({ ok: !!m.ok, wav: m.wav, error: m.error })
+      }
+    }
+    child.on('message', onMsg)
+    child.send({ type: 'synth', id, text, speed, sid })
+  })
+}
+
+// 开始流式朗读：切分段落 → 子进程并行预合成 → 按序推送 chunk
+async function startStream(text, modelId, speed, sid, handlers) {
   stopStream()
   const rawSegments = splitText(text)
   // 过滤掉几乎不含中文的段落（纯中文模型无法朗读英文）
@@ -236,46 +267,44 @@ async function startStream(text, modelId, speed, handlers) {
   const MAX_SEGMENTS = 60
   const truncated = segments.length > MAX_SEGMENTS
   const active = truncated ? segments.slice(0, MAX_SEGMENTS) : segments
-  let tts
+  let config
   try {
-    tts = new sherpa.OfflineTts(buildConfig(modelId))
+    config = buildConfig(modelId)
   } catch (e) {
-    handlers.onError?.({ error: '模型加载失败: ' + (e.message || e) })
+    handlers.onError?.({ error: e.message || String(e) })
     return { error: e.message || String(e) }
+  }
+  const workerCount = Math.max(1, Math.min(4, active.length))
+  const workers = []
+  for (let i = 0; i < workerCount; i++) {
+    try {
+      workers.push(await createWorker(config))
+    } catch (e) {
+      for (const w of workers) w.kill()
+      handlers.onError?.({ error: '模型加载失败: ' + (e.message || e) })
+      return { error: e.message || String(e) }
+    }
   }
   const state = {
     segments: active,
-    tts,
+    workers,
     speed: Number(speed) || 1.0,
+    sid: Number(sid) || 0,
     handlers,
     expectedIndex: 0,
     results: new Map(),
     stopped: false,
     total: active.length,
+    nextIndex: 0,
     t0: Date.now(),
   }
   streamState = state
   console.log(
-    `[TTS] 开始流式朗读: ${active.length} 段 | 主进程同步 | 语速 ${state.speed}` +
+    `[TTS] 开始流式朗读: ${active.length} 段 | ${workerCount} 子进程 | 语速 ${state.speed} | 音色 sid ${state.sid}` +
       (skipped ? ` | 跳过无中文段落 ${skipped} 段` : '') +
       (truncated ? ` | 截断 ${segments.length - MAX_SEGMENTS} 段` : ''),
   )
   handlers.onState?.({ type: 'start', total: active.length })
-
-  // 同步合成单段
-  function synthSync(seg, spd) {
-    const genCfg = new sherpa.GenerationConfig({
-      sid: 0,
-      speed: Number(spd) || 1.0,
-      silenceScale: 0.2,
-    })
-    const audio = state.tts.generate({ text: seg, generationConfig: genCfg })
-    if (!audio || !audio.samples || !audio.samples.length) {
-      return { ok: false, error: '无音频输出' }
-    }
-    const wav = encodeWav(audio.samples, audio.sampleRate)
-    return { ok: true, wav: wav.toString('base64') }
-  }
 
   function pump() {
     while (state.results.has(state.expectedIndex)) {
@@ -294,33 +323,39 @@ async function startStream(text, modelId, speed, handlers) {
     }
   }
 
-  // 逐段同步合成，段间让出事件循环（渲染进程播放不受影响）
-  for (let i = 0; i < active.length; i++) {
-    if (state.stopped) break
+  const launch = async () => {
+    if (state.stopped || state.nextIndex >= state.total) return
+    const index = state.nextIndex++
+    const worker = state.workers[index % state.workers.length]
     const t0 = Date.now()
-    console.log(`[TTS] 段 ${i + 1}/${state.total} 开始合成`)
+    console.log(`[TTS] 段 ${index + 1}/${state.total} 开始合成`)
     let msg
     try {
-      msg = synthSync(active[i], state.speed)
+      msg = await Promise.race([
+        synthInWorker(worker, state.segments[index], state.speed, state.sid),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('合成超时')), 30000)),
+      ])
     } catch (e) {
       msg = { ok: false, error: e.message || String(e) }
     }
     const cost = ((Date.now() - t0) / 1000).toFixed(1)
     if (msg.ok) {
-      console.log(`[TTS] 段 ${i + 1}/${state.total} 完成 ${(msg.wav.length / 1024).toFixed(0)}KB (${cost}s)`)
+      console.log(`[TTS] 段 ${index + 1}/${state.total} 完成 ${(msg.wav.length / 1024).toFixed(0)}KB (${cost}s)`)
     } else {
-      console.error(`[TTS] 段 ${i + 1}/${state.total} 失败: ${msg.error}`)
+      console.error(`[TTS] 段 ${index + 1}/${state.total} 失败: ${msg.error}`)
     }
-    state.results.set(i, msg)
+    state.results.set(index, msg)
     pump()
-    // 让出事件循环，允许渲染进程刷新与后续 IPC
-    await new Promise((r) => setImmediate(r))
+    launch()
   }
+
+  for (let i = 0; i < Math.min(workerCount, active.length); i++) launch()
   return { count: active.length, skipped, truncated: truncated ? segments.length - MAX_SEGMENTS : 0 }
 }
 
 function cleanupStream(state) {
   if (streamState === state) streamState = null
+  for (const w of state.workers) { try { w.kill() } catch {} }
 }
 
 function stopStream() {
@@ -330,6 +365,7 @@ function stopStream() {
     s.stopped = true
     console.log('[TTS] 朗读已停止')
     s.handlers.onState?.({ type: 'stopped' })
+    for (const w of s.workers) { try { w.kill() } catch {} }
   }
 }
 
