@@ -22,7 +22,7 @@ export default function Navbar() {
         </Link>
         <nav className={`navbar-links ${menuOpen ? 'navbar-links--open' : ''}`}>
           <Link to="/pages" className="navbar-link" onClick={closeMenu}>在线文档</Link>
-          <Link to="/download" className="navbar-link" onClick={closeMenu}>应用下载</Link>
+          {!isElectron && <Link to="/download" className="navbar-link" onClick={closeMenu}>应用下载</Link>}
           <Link to="/terms" className="navbar-link" onClick={closeMenu}>用户协议</Link>
         </nav>
       </div>

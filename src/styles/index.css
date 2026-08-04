@@ -3104,6 +3104,89 @@ button {
   color: var(--color-primary);
 }
 
+/* 双源下载按钮 */
+.download-card--dual {
+  align-items: flex-start;
+  cursor: default;
+}
+.download-card--dual:hover {
+  border-color: var(--color-border);
+  box-shadow: none;
+}
+.download-card-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+.download-source-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all .15s;
+}
+.download-source-btn--github {
+  background: #24292e;
+  color: #fff;
+  border: 1px solid #24292e;
+}
+.download-source-btn--github:hover {
+  background: #1b1f23;
+}
+.download-source-btn--cdn {
+  background: transparent;
+  color: var(--color-primary);
+  border: 1px solid var(--color-primary);
+}
+.download-source-btn--cdn:hover {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+/* PWA 安装步骤 */
+.download-pwa-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+.download-pwa-step {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+.download-pwa-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* 预留给未发布的平台 */
+.download-card--pending {
+  opacity: .6;
+  cursor: default;
+}
+.download-card--pending:hover {
+  border-color: var(--color-border);
+  box-shadow: none;
+}
+
 /* ===== 移动端响应式（max-width: 640px） ===== */
 @media (max-width: 640px) {
   /* 导航栏 */

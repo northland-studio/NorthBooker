@@ -1,0 +1,17 @@
+{
+  "name": "北牖 NorthBooker",
+  "short_name": "NorthBooker",
+  "description": "云端文档查看与在线协作",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#1a1b1d",
+  "theme_color": "#004aad",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
