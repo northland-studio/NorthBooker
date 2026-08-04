@@ -19,6 +19,7 @@ import { useAuthStore } from '@/store/auth'
 import { useThemeStore } from '@/store/theme'
 import { formatDate } from '@/utils/fileType'
 import DocSearch from '@/components/DocSearch'
+import MarkdownSearch from '@/components/MarkdownSearch'
 import CommentPanel from '@/components/CommentPanel'
 
 interface TocItem {
@@ -508,7 +509,13 @@ export default function PageEditor() {
         )}
       </div>
 
-      {showSearch && <DocSearch editor={editor} />}
+      {showSearch && (
+        editorType === 'richtext' ? (
+          <DocSearch editor={editor} />
+        ) : (
+          <MarkdownSearch content={markdownContent} textareaId="md-editor-textarea" />
+        )
+      )}
 
       <div className={`page-editor-body ${theme === 'dark' ? 'page-editor-body--dark' : ''}`}>
         {showToc && toc.length > 0 && (
@@ -548,6 +555,7 @@ export default function PageEditor() {
               {canEdit ? (
                 <>
                   <textarea
+                    id="md-editor-textarea"
                     className="markdown-editor-textarea"
                     value={markdownContent}
                     onChange={(e) => {
