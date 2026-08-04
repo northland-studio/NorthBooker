@@ -13,6 +13,7 @@ import {
   QINIU_UPLOAD_URL,
   qiniuConfig,
 } from '../qiniu.js'
+import logger from '../logger.js'
 
 const router = Router()
 
@@ -40,14 +41,12 @@ router.get('/token', (req, res) => {
   }
   const key = buildKey(fileName)
   const uploadToken = getUploadToken(key)
-  console.log('[北牖] 颁发上传凭证:', {
-    user: req.user?.id,
+  logger.info('upload', '颁发上传凭证', {
+    userId: req.user?.id,
     fileName,
     key,
     uploadUrl: QINIU_UPLOAD_URL,
     tokenLen: uploadToken.length,
-    tokenHead: uploadToken.slice(0, 24),
-    tokenTail: uploadToken.slice(-16),
   })
   res.json({
     uploadToken,
@@ -114,7 +113,7 @@ router.delete('/', async (req, res) => {
     await deleteFile(key)
     res.json({ ok: true })
   } catch (err) {
-    console.error('[北牖] 七牛删除失败:', err.message)
+    logger.error('upload', '七牛删除失败', { error: err.message, key })
     res.status(500).json({ error: '对象存储删除失败' })
   }
 })

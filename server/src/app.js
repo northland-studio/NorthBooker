@@ -1,6 +1,7 @@
 import express from 'express'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
+import logger from './logger.js'
 import documentsRouter from './routes/documents.js'
 import authRouter from './routes/auth.js'
 import adminRouter from './routes/admin.js'
@@ -9,11 +10,26 @@ import bookmarksRouter from './routes/bookmarks.js'
 import commentsRouter from './routes/comments.js'
 import pagesRouter from './routes/pages.js'
 import foldersRouter from './routes/folders.js'
+import logRouter from './routes/log.js'
 
 const app = express()
 
 // 信任反向代理（cloudflare/nginx），以便正确识别 HTTPS 与客户端 IP
 app.set('trust proxy', 1)
+
+// === 请求日志中间件 ===
+app.use((req, res, next) => {
+  const start = Date.now()
+  res.on('finish', () => {
+    const ms = Date.now() - start
+    const level = res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info'
+    logger[level]('http', `${req.method} ${req.originalUrl} ${res.statusCode} ${ms}ms`, {
+      ip: req.ip,
+      ua: req.get('user-agent')?.slice(0, 100) || '',
+    })
+  })
+  next()
+})
 
 // 中间件
 app.use(cors())
@@ -29,6 +45,7 @@ app.use('/api/bookmarks', bookmarksRouter)
 app.use('/api/comments', commentsRouter)
 app.use('/api/pages', pagesRouter)
 app.use('/api/folders', foldersRouter)
+app.use('/api/log', logRouter)
 
 // 健康检查
 app.get('/api/health', (req, res) => {

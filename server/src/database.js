@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import logger from './logger.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DB_PATH = path.resolve(__dirname, '../data/northbooker.sqlite')
@@ -81,7 +82,7 @@ db.exec(`
 // 迁移：为已有的 pages 表补充 visibility 列（v0.2.0+）
 try {
   db.exec('ALTER TABLE pages ADD COLUMN visibility TEXT NOT NULL DEFAULT \'private\'')
-  console.log('[北牖] 已迁移 pages.visibility 列')
+  logger.info('db', '已迁移 pages.visibility 列')
 } catch {
   // 列已存在则跳过
 }
@@ -89,7 +90,7 @@ try {
 // 迁移：为已有的 documents 表添加 folder_id 列（v0.3.0+）
 try {
   db.exec('ALTER TABLE documents ADD COLUMN folder_id TEXT REFERENCES folders(id)')
-  console.log('[北牖] 已迁移 documents.folder_id 列')
+  logger.info('db', '已迁移 documents.folder_id 列')
 } catch {
   // 列已存在则跳过
 }
@@ -110,7 +111,7 @@ if (count.c === 0) {
   ]
   const tx = db.transaction((rows) => rows.forEach((r) => insert.run(...r)))
   tx(seed)
-  console.log('[北牖] 已初始化示例文档数据')
+  logger.info('db', '已初始化示例文档数据')
 }
 
 export default db

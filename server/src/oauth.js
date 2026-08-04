@@ -1,6 +1,8 @@
 // 北牖 OAuth 配置（对接玄剑官网）
 // 玄剑端点：/api/oauth/authorize、/api/oauth/token、/api/oauth/verify、/api/oauth/userinfo
 
+import logger from './logger.js'
+
 export const oauthConfig = {
   providerUrl: process.env.OAUTH_PROVIDER_URL || 'https://www.xuanjian.top',
   clientId: process.env.OAUTH_CLIENT_ID || 'northbooker',
@@ -38,7 +40,7 @@ export async function verifyXuanjianToken(token) {
     verifyCache.set(token, { user: data.user, expiresAt: Date.now() + CACHE_TTL })
     return data.user
   } catch (err) {
-    console.error('[北牖] 玄剑 token 校验失败:', err.message)
+    logger.error('oauth', '玄剑 token 校验失败', { error: err.message })
     return null
   }
 }

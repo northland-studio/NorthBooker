@@ -2,6 +2,7 @@ import { Router } from 'express'
 import crypto from 'node:crypto'
 import { oauthConfig, verifyXuanjianToken, invalidateToken } from '../oauth.js'
 import { authMiddleware } from '../middleware/auth.js'
+import logger from '../logger.js'
 
 const router = Router()
 
@@ -91,13 +92,13 @@ router.get('/callback', async (req, res) => {
     })
     if (!resp.ok) {
       const errBody = await resp.json().catch(() => ({}))
-      console.error('[北牖] 换取 token 失败:', resp.status, errBody)
+      logger.error('auth', '换取 token 失败', { status: resp.status, errBody })
       return res.redirect('/?auth_error=token_exchange_failed')
     }
     const tokenData = await resp.json()
     accessToken = tokenData.access_token
   } catch (err) {
-    console.error('[北牖] 换取 token 异常:', err.message)
+    logger.error('auth', '换取 token 异常', { error: err.message })
     return res.redirect('/?auth_error=server_error')
   }
 

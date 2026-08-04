@@ -1,4 +1,5 @@
 import axios from 'axios'
+import logger from '../utils/logger'
 
 // 北牖前端统一 axios 实例
 // - baseURL: /api 由 Vite 代理转发到后端（生产由 Nginx 转发）
@@ -8,19 +9,35 @@ const client = axios.create({
   timeout: 15000,
 })
 
-// 请求拦截：附加 Bearer token
+// 请求拦截：附加 Bearer token + 开发日志
 client.interceptors.request.use((config) => {
   const token = localStorage.getItem('nb_token')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
+  if (import.meta.env.DEV) {
+    ;(config as any)._startTime = Date.now()
+  }
   return config
 })
 
-// 响应拦截：统一错误处理
+// 响应拦截：统一错误处理 + 开发日志
 client.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    if (import.meta.env.DEV && (res.config as any)._startTime) {
+      const ms = Date.now() - (res.config as any)._startTime
+      logger.debug('api', `${res.config.method?.toUpperCase()} ${res.config.url} ${res.status} ${ms}ms`)
+    }
+    return res
+  },
   (error) => {
+    if (import.meta.env.DEV && (error.config as any)?._startTime) {
+      const ms = Date.now() - (error.config as any)._startTime
+      logger.error('api', `${error.config?.method?.toUpperCase()} ${error.config?.url} ${error.response?.status || 'ERR'} ${ms}ms`, {
+        error: error.message,
+        data: error.response?.data,
+      })
+    }
     if (error.response?.status === 401) {
       // token 失效，清理本地登录态并跳转登录
       localStorage.removeItem('nb_token')

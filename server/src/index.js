@@ -10,11 +10,14 @@ dotenv.config({ path: path.resolve(__dirname, '../.env') })
 
 // 动态 import 确保 .env 已加载后再加载 app 及其依赖（qiniu.js 等）
 const { default: app } = await import('./app.js')
+const { default: logger } = await import('./logger.js')
 
 // 北牖后端服务入口
 const PORT = process.env.PORT || 3090
 
 app.listen(PORT, () => {
-  console.log(`[北牖] 后端服务已启动: http://localhost:${PORT}`)
-  console.log('[北牖] 七牛密钥:', process.env.QINIU_ACCESS_KEY ? `已加载(${process.env.QINIU_ACCESS_KEY.slice(0, 6)}...)` : '未加载')
+  logger.info('server', `后端服务已启动: http://localhost:${PORT}`, {
+    qiniu: process.env.QINIU_ACCESS_KEY ? `已加载(${process.env.QINIU_ACCESS_KEY.slice(0, 6)}...)` : '未加载',
+    oauth: process.env.OAUTH_CLIENT_ID ? '已配置' : '未配置',
+  })
 })

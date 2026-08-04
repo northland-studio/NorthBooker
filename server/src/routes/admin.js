@@ -2,6 +2,7 @@ import { Router } from 'express'
 import db from '../database.js'
 import { authMiddleware, adminMiddleware } from '../middleware/auth.js'
 import { deleteFile, parseKeyFromUrl, signPrivateUri } from '../qiniu.js'
+import logger from '../logger.js'
 
 const router = Router()
 
@@ -93,7 +94,7 @@ router.delete('/documents/:id', async (req, res) => {
     try {
       await deleteFile(key)
     } catch (err) {
-      console.error('[北牖] 删除七牛文件失败:', err.message)
+      logger.error('admin', '删除七牛文件失败', { error: err.message, key })
     }
   }
 
