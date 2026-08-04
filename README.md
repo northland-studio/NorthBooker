@@ -91,7 +91,7 @@ northbooker/
 ├── server/                    # 后端服务
 │   ├── src/
 │   │   ├── middleware/        # 认证与权限中间件
-│   │   ├── routes/            # 路由（documents、auth、admin、uploads、bookmarks、comments、pages）
+│   │   ├── routes/            # 路由（documents、auth、admin、uploads、bookmarks、comments、pages、folders）
 │   │   ├── utils/             # 后端工具（fileType）
 │   │   ├── app.js             # Express 应用
 │   │   ├── database.js        # SQLite 初始化与示例数据
@@ -100,9 +100,13 @@ northbooker/
 │   │   └── qiniu.js           # 七牛对象存储配置
 │   ├── data/                  # SQLite 数据库目录
 │   └── .env.example
-├── electron/                  # Electron 桌面版
+├── electron/                  # Electron 桌面版（v2.0.0 内置前端架构）
 │   ├── main.js                # Electron 主进程
 │   ├── preload.js             # 预加载脚本（contextBridge）
+│   ├── renderer/              # 内置前端（自定义标题栏 + 侧边导航）
+│   │   ├── index.html
+│   │   ├── style.css
+│   │   └── app.js
 │   └── package.json           # 桌面版依赖（electron-builder）
 ├── public/                    # 前端静态资源与示例文档
 ├── .github/workflows/         # GitHub Actions 构建流水线
@@ -285,10 +289,12 @@ QINIU_CDN_DOMAIN=https://cdn.northbooker.xuanjian.top
 
 | 路径 | 页面 | 权限 |
 |:---|:---|:---|
-| `/` | 文档列表（含书签筛选） | 公开 |
+| `/` | 文件托管（含文件夹导航/书签筛选） | 公开 |
 | `/viewer/:id` | 文档查看（含评论、转发、书签） | 公开 |
 | `/pages` | 在线文档列表 | 公开 |
 | `/pages/:id` | 在线文档编辑器 | 登录后可编辑 |
+| `/download` | 应用下载 | 公开 |
+| `/terms` | 用户协议 | 公开 |
 | `/callback` | OAuth 回调处理 | 公开 |
 | `/admin` | 管理后台 | 需登录且 level >= 1 |
 
@@ -326,6 +332,9 @@ QINIU_CDN_DOMAIN=https://cdn.northbooker.xuanjian.top
 | `/api/pages` | POST | 登录 | 创建页面 |
 | `/api/pages/:id` | PUT | 登录 | 更新页面（作者/管理员） |
 | `/api/pages/:id` | DELETE | 登录 | 删除页面（作者/管理员） |
+| `/api/folders` | GET | 公开 | 获取文件夹列表（支持 parent_id 过滤） |
+| `/api/folders` | POST | level >= 1 | 创建文件夹 |
+| `/api/folders/:id` | DELETE | level >= 1 | 删除文件夹（级联清理子文档） |
 
 ---
 
