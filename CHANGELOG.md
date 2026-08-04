@@ -3,6 +3,13 @@
 本文件记录北牖（NorthBooker）项目的版本演进与变更内容。
 发布单位：北域工作室（Northland Studio）
 
+## v2.3.2 (Electron) — 2026-08-04
+
+### 修复
+
+- **修复**：服务器缺少版本历史路由导致 /api/pages/:id/versions 返回 404
+- **修复**：在线文档自动保存失效 — scheduleSave 闭包陷阱导致 doSave 捕获过时的 canEdit
+
 ## v2.3.1 (Electron) — 2026-08-04
 
 ### 修复

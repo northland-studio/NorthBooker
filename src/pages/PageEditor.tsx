@@ -68,11 +68,12 @@ export default function PageEditor() {
   const [versionsLoading, setVersionsLoading] = useState(false)
   const [restoreConfirmId, setRestoreConfirmId] = useState<number | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout>>()
-  // 用 ref 解决 useCallback 闭包陷阱：scheduleSave（空依赖）调用的 doSave 需要最新的 title
+  // 用 ref 解决 useCallback 闭包陷阱：scheduleSave（空依赖）调用的 doSave 需要最新的状态
   const titleRef = useRef(title)
   titleRef.current = title
   const markdownRef = useRef(markdownContent)
   markdownRef.current = markdownContent
+  const doSaveRef = useRef<(() => Promise<void>) | null>(null)
 
   const editor = useEditor({
     extensions: [
@@ -205,7 +206,7 @@ export default function PageEditor() {
 
   const scheduleSave = useCallback(() => {
     clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => doSave(), 1500)
+    saveTimer.current = setTimeout(() => doSaveRef.current?.(), 1500)
   }, [])
 
   const doSave = useCallback(async () => {
@@ -237,6 +238,7 @@ export default function PageEditor() {
       setSaving(false)
     }
   }, [id, editor, canEdit, editorType])
+  doSaveRef.current = doSave
 
   // Ctrl+S 手动保存
   useEffect(() => {
