@@ -7,6 +7,18 @@ export async function fetchDocuments(): Promise<Document[]> {
   return data
 }
 
+// 按文件夹获取文档
+export async function fetchDocumentsByFolder(folderId?: string | null): Promise<Document[]> {
+  const params = folderId !== undefined ? { folder_id: folderId || '' } : {}
+  const { data } = await client.get<Document[]>('/documents', { params })
+  return data
+}
+
+// 移动文档到文件夹
+export async function moveDocument(id: string, folderId: string | null): Promise<void> {
+  await client.put(`/documents/${id}`, { folder_id: folderId })
+}
+
 // 按 id 获取单个文档
 export async function fetchDocumentById(id: string): Promise<Document | null> {
   try {

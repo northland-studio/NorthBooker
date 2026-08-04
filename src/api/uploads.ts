@@ -39,6 +39,7 @@ export async function uploadCallback(params: {
   title?: string
   size: number
   hash: string
+  folder_id?: string | null
 }): Promise<Document> {
   const { data } = await client.post<Document>('/uploads/callback', params)
   return data
@@ -109,6 +110,7 @@ export async function uploadDocument(
   file: File,
   title: string,
   onProgress?: (percent: number) => void,
+  folderId?: string | null,
 ): Promise<Document> {
   // 1. 获取上传凭证
   const token = await fetchUploadToken(file.name)
@@ -129,6 +131,7 @@ export async function uploadDocument(
     title,
     size: qiniuResp.fsize || file.size,
     hash: qiniuResp.hash,
+    folder_id: folderId || null,
   })
   return doc
 }
