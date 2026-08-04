@@ -360,9 +360,12 @@ ipcMain.handle('get-platform', () => process.platform)
 ipcMain.handle('get-site-url', () => SITE_URL)
 
 // ===== 自动更新 =====
+let activeUpdater = null // 当前活跃的 updater 实例（用于手动下载/安装）
+
 function setupAutoUpdater() {
-  autoUpdater.autoDownload = true
+  autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
+  activeUpdater = autoUpdater
 
   autoUpdater.on('update-available', (info) => {
     mainWindow?.webContents.send('update-available', info)
@@ -425,13 +428,18 @@ async function checkUpdatesDualSource() {
   try {
     const { NsisUpdater } = require('electron-updater')
     const cdnUpdater = new NsisUpdater({ provider: 'generic', url: CDN_URL })
-    cdnUpdater.autoDownload = true
+    cdnUpdater.autoDownload = false
     cdnUpdater.autoInstallOnAppQuit = true
+    activeUpdater = cdnUpdater
     cdnUpdater.on('update-available', (info) => {
       mainWindow?.webContents.send('update-available', info)
       console.log('[更新] CDN 发现新版本:', info.version)
     })
-    cdnUpdater.on('update-downloaded', () => mainWindow?.webContents.send('update-downloaded'))
+    cdnUpdater.on('download-progress', (p) => mainWindow?.webContents.send('update-progress', p.percent))
+    cdnUpdater.on('update-downloaded', () => {
+      mainWindow?.webContents.send('update-downloaded')
+      console.log('[更新] CDN 下载完成')
+    })
     cdnUpdater.on('error', (err) => console.error('[更新] CDN 源失败:', err.message))
     const cdnResult = await cdnUpdater.checkForUpdates().catch(() => null)
     if (!cdnResult?.updateInfo) {
@@ -444,8 +452,8 @@ async function checkUpdatesDualSource() {
 }
 
 ipcMain.handle('check-update', checkUpdatesDualSource)
-ipcMain.handle('download-update', () => autoUpdater.downloadUpdate())
-ipcMain.handle('install-update', () => autoUpdater.quitAndInstall())
+ipcMain.handle('download-update', () => activeUpdater?.downloadUpdate())
+ipcMain.handle('install-update', () => activeUpdater?.quitAndInstall())
 
 // ===== 应用生命周期 =====
 Menu.setApplicationMenu(null)

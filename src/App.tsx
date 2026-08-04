@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import Layout from '@/components/Layout'
 import RequireLevel from '@/components/RequireLevel'
@@ -12,6 +12,7 @@ import PageTerms from '@/pages/PageTerms'
 import PageDownload from '@/pages/PageDownload'
 import { useAuthStore } from '@/store/auth'
 import UpdatePopup from '@/components/UpdatePopup'
+import DownloadNotification from '@/components/DownloadNotification'
 
 // 应用启动时，若有 token 但无缓存用户，自动拉取用户信息
 // （Electron 浏览器登录后 reload 的场景）
@@ -30,10 +31,13 @@ function AuthInit() {
 }
 
 export default function App() {
+  const [showUpdatePopup, setShowUpdatePopup] = useState(false)
+
   return (
     <>
       <AuthInit />
-      <UpdatePopup />
+      <DownloadNotification onShowUpdatePopup={() => setShowUpdatePopup(true)} />
+      <UpdatePopup visible={showUpdatePopup} onClose={() => setShowUpdatePopup(false)} />
       <Routes>
         {/* OAuth 回调页：独立全屏，不走 Layout */}
         <Route path="/callback" element={<AuthCallback />} />
