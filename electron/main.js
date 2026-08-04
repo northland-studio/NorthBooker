@@ -502,7 +502,12 @@ async function checkUpdatesDualSource() {
     console.log('[更新] GitHub 最新:', ghVer)
     if (ghVer && ghVer !== currentVer) {
       const result = await autoUpdater.checkForUpdates().catch(() => null)
-      if (result?.updateInfo) return
+      if (result?.updateInfo) {
+        // GitHub 源可用，同时预热 CDN 作为下载失败时的后备
+        activeUpdater = autoUpdater
+        initCdnUpdaterAsFallback()
+        return
+      }
       console.log('[更新] GitHub provider 未检测到，改用 CDN 源下载')
     } else {
       console.log('[更新] GitHub 已是最新')
@@ -513,7 +518,46 @@ async function checkUpdatesDualSource() {
     console.log('[更新] GitHub API 不可用:', e.message)
   }
 
+  // GitHub 不可用，尝试 CDN
   console.log('[更新] 使用 CDN 源...')
+  tryCdnUpdater()
+}
+
+// 预热 CDN updater 作为后备（当 GitHub 下载失败时自动切换）
+function initCdnUpdaterAsFallback() {
+  try {
+    const { NsisUpdater } = require('electron-updater')
+    const cdnUpdater = new NsisUpdater({ provider: 'generic', url: CDN_URL })
+    cdnUpdater.autoDownload = false
+    cdnUpdater.autoInstallOnAppQuit = true
+    cdnUpdater.on('update-available', (info) => {
+      mainWindow?.webContents.send('update-available', info)
+      console.log('[更新] CDN 后备 发现新版本:', info.version)
+    })
+    cdnUpdater.on('download-progress', (p) => mainWindow?.webContents.send('update-progress', p.percent))
+    cdnUpdater.on('update-downloaded', () => {
+      mainWindow?.webContents.send('update-downloaded')
+      console.log('[更新] CDN 后备 下载完成')
+    })
+    cdnUpdater.on('error', (err) => console.error('[更新] CDN 后备 失败:', err.message))
+
+    // 当 GitHub 下载出错时自动切换到 CDN
+    autoUpdater.on('error', (err) => {
+      console.error('[更新] GitHub 下载失败，切换 CDN:', err.message)
+      activeUpdater = cdnUpdater
+      mainWindow?.webContents.send('update-source-switched')
+    })
+
+    cdnUpdater.checkForUpdates().then((r) => {
+      if (r?.updateInfo) console.log('[更新] CDN 后备就绪')
+    }).catch(() => {})
+  } catch (e) {
+    console.error('[更新] CDN 后备初始化失败:', e.message)
+  }
+}
+
+// 直接使用 CDN 源
+function tryCdnUpdater() {
   try {
     const { NsisUpdater } = require('electron-updater')
     const cdnUpdater = new NsisUpdater({ provider: 'generic', url: CDN_URL })
@@ -530,10 +574,11 @@ async function checkUpdatesDualSource() {
       console.log('[更新] CDN 下载完成')
     })
     cdnUpdater.on('error', (err) => console.error('[更新] CDN 源失败:', err.message))
-    const cdnResult = await cdnUpdater.checkForUpdates().catch(() => null)
-    if (!cdnResult?.updateInfo) {
+    cdnUpdater.checkForUpdates().then((r) => {
+      if (!r?.updateInfo) mainWindow?.webContents.send('update-not-available')
+    }).catch(() => {
       mainWindow?.webContents.send('update-not-available')
-    }
+    })
   } catch (e) {
     console.error('[更新] CDN 源异常:', e.message)
     mainWindow?.webContents.send('update-not-available')

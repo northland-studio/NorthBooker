@@ -45,10 +45,19 @@ export default function DownloadNotification({
       setPhase('available') // 回到可重试状态
     }
 
+    // GitHub 下载失败时自动切换到 CDN → 自动重试下载
+    const onSourceSwitched = () => {
+      setError('')
+      setPhase('downloading')
+      setProgress(0)
+      api.downloadUpdate()
+    }
+
     api.onUpdateAvailable(onAvailable)
     api.onUpdateProgress(onProgress)
     api.onUpdateDownloaded(onDownloaded)
     api.onUpdateError(onError)
+    api.onSourceSwitched(onSourceSwitched)
 
     return () => {
       // electronAPI 事件无 removeListener，组件卸载不影响
