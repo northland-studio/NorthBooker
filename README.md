@@ -53,7 +53,14 @@
 - 桌面应用：Electron 封装（Windows/macOS/Linux），GitHub Actions 自动构建
 - PWA 支持：manifest.json + iOS 主屏幕独立应用模式
 - 下载页：动态版本号 + GitHub / CDN 双源分发
-- 桌面端客制化：云字体预设、本地字体选择、系统托盘、开机启动
+- 桌面端客制化：云字体预设、本地字体选择、系统托盘、开机启动、自定义主题色
+- 全文搜索：跨在线文档 FTS5 索引 + 实时高亮
+- 缩略图预览：PDF/Office 文件自动生成缩略图
+- 批量操作：多选移动、删除文档
+- Markdown 在线编辑器：分栏实时预览
+- 文档版本历史：自动快照 + 回滚
+- 密码分享：带密码和过期的分享链接
+- 更新通知：WebSocket 实时推送 + 系统原生通知
 - 响应式布局，适配桌面与移动端
 
 ---
@@ -340,6 +347,13 @@ QINIU_CDN_DOMAIN=https://cdn.northbooker.xuanjian.top
 | `/api/folders` | GET | 公开 | 获取文件夹列表（支持 parent_id 过滤） |
 | `/api/folders` | POST | level >= 1 | 创建文件夹 |
 | `/api/folders/:id` | DELETE | level >= 1 | 删除文件夹（级联清理子文档） |
+| `/api/search` | GET | 公开 | 全文搜索（文档 + 在线文档） |
+| `/api/subscriptions` | GET/POST/DELETE | 登录 | 文档订阅管理 |
+| `/api/share` | POST | 登录 | 创建密码分享链接 |
+| `/api/share/:token` | GET | 公开 | 验证分享链接 |
+| `/api/share/:token/verify` | POST | 公开 | 密码验证获取文档 |
+| `/api/pages/:id/versions` | GET | 公开 | 获取版本历史 |
+| `/api/pages/:id/versions/:vid/restore` | POST | 登录 | 回滚到指定版本 |
 
 ---
 

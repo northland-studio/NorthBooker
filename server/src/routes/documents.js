@@ -2,6 +2,7 @@ import { Router } from 'express'
 import db from '../database.js'
 import { authMiddleware, adminMiddleware } from '../middleware/auth.js'
 import { signPrivateUri } from '../qiniu.js'
+import bus from '../bus.js'
 
 const router = Router()
 
@@ -69,6 +70,7 @@ router.put('/:id', authMiddleware, adminMiddleware, (req, res) => {
 
   const row = db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id)
   if (!row) return res.status(404).json({ error: '文档不存在' })
+  bus.emit('document:updated', { documentId: req.params.id })
   res.json(toDoc(row))
 })
 

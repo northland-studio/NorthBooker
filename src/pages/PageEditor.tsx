@@ -14,7 +14,7 @@ import { Table } from '@tiptap/extension-table'
 import { TableRow } from '@tiptap/extension-table-row'
 import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
-import { fetchPage, updatePage } from '@/api/pages'
+import { fetchPage, updatePage, fetchPageVersions, restorePageVersion } from '@/api/pages'
 import { useAuthStore } from '@/store/auth'
 import { useThemeStore } from '@/store/theme'
 import { formatDate } from '@/utils/fileType'
@@ -25,6 +25,16 @@ interface TocItem {
   level: number
   text: string
   id: string
+}
+
+interface PageVersion {
+  id: number
+  version: number
+  content: string
+  createdAt: string
+  authorName: string
+  authorAvatar?: string | null
+  isRollback?: boolean
 }
 
 // 在线文档编辑器
@@ -48,10 +58,18 @@ export default function PageEditor() {
   const [copied, setCopied] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
   const [showComments, setShowComments] = useState(false)
+  const [editorType, setEditorType] = useState<'richtext' | 'markdown'>('richtext')
+  const [markdownContent, setMarkdownContent] = useState('')
+  const [showVersions, setShowVersions] = useState(false)
+  const [versions, setVersions] = useState<PageVersion[]>([])
+  const [versionsLoading, setVersionsLoading] = useState(false)
+  const [restoreConfirmId, setRestoreConfirmId] = useState<number | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout>>()
   // 用 ref 解决 useCallback 闭包陷阱：scheduleSave（空依赖）调用的 doSave 需要最新的 title
   const titleRef = useRef(title)
   titleRef.current = title
+  const markdownRef = useRef(markdownContent)
+  markdownRef.current = markdownContent
 
   const editor = useEditor({
     extensions: [
@@ -114,13 +132,96 @@ export default function PageEditor() {
     return authorId > 0 && user.id === authorId
   }, [user, authorId])
 
+  // 简易 Markdown 渲染器
+  const renderMarkdown = useCallback((content: string): string => {
+    let html = content
+      // 转义 HTML 特殊字符
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+
+    // 代码块（必须在行内代码之前处理）
+    html = html.replace(/```(\w*)\n([\s\S]*?)```/g, (_: string, lang: string, code: string) => {
+      const escaped = code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      return `<pre><code class="language-${lang}">${escaped}</code></pre>`
+    })
+
+    // 行内代码
+    html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
+
+    // 标题（行首匹配）
+    html = html.replace(/^### (.+)$/gm, '<h3>$1</h3>')
+    html = html.replace(/^## (.+)$/gm, '<h2>$1</h2>')
+    html = html.replace(/^# (.+)$/gm, '<h1>$1</h1>')
+
+    // 粗体 + 斜体
+    html = html.replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+    html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    html = html.replace(/\*(.+?)\*/g, '<em>$1</em>')
+
+    // 链接
+    html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+
+    // 图片
+    html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '<img src="$2" alt="$1" />')
+
+    // 无序列表项
+    html = html.replace(/^\- (.+)$/gm, '<li>$1</li>')
+    html = html.replace(/((?:<li>.*<\/li>\n?)+)/g, '<ul>$1</ul>')
+
+    // 水平线
+    html = html.replace(/^---$/gm, '<hr />')
+
+    // 段落：连续的非空行
+    const lines = html.split('\n')
+    const result: string[] = []
+    let inList = false
+    for (const line of lines) {
+      if (line.startsWith('<pre>') || line.startsWith('<h') || line.startsWith('<ul>') || line.startsWith('<li>') || line.startsWith('<hr')) {
+        if (inList && !line.startsWith('<li>') && !line.startsWith('</ul>') && !line.startsWith('<ul>')) {
+          result.push('</ul>')
+          inList = false
+        }
+        result.push(line)
+        if (line.startsWith('<ul>')) inList = true
+        if (line.endsWith('</ul>')) inList = false
+      } else if (line.trim() === '') {
+        if (inList) {
+          result.push('</ul>')
+          inList = false
+        }
+        result.push('')
+      } else {
+        result.push(`<p>${line}</p>`)
+      }
+    }
+    if (inList) result.push('</ul>')
+
+    return result.join('\n')
+  }, [])
+
   const scheduleSave = useCallback(() => {
     clearTimeout(saveTimer.current)
     saveTimer.current = setTimeout(() => doSave(), 1500)
   }, [])
 
   const doSave = useCallback(async () => {
-    if (!id || !editor || !canEdit) return
+    if (!id || !canEdit) return
+    if (editorType === 'markdown') {
+      setSaving(true)
+      try {
+        await updatePage(id, {
+          title: titleRef.current || '无标题文档',
+          content: markdownRef.current,
+        })
+      } catch {
+        // ignore
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+    if (!editor) return
     setSaving(true)
     try {
       await updatePage(id, {
@@ -132,19 +233,22 @@ export default function PageEditor() {
     } finally {
       setSaving(false)
     }
-  }, [id, editor, canEdit])
+  }, [id, editor, canEdit, editorType])
 
   // Ctrl+S 手动保存
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault()
-        if (id && editor && canEdit) {
+        if (id && canEdit) {
           clearTimeout(saveTimer.current)
           setSaving(true)
+          const content = editorType === 'markdown'
+            ? markdownRef.current
+            : (editor ? editor.getHTML() : '')
           updatePage(id, {
             title: titleRef.current || '无标题文档',
-            content: editor.getHTML(),
+            content,
           })
             .then(() => setSaving(false))
             .catch(() => setSaving(false))
@@ -153,7 +257,7 @@ export default function PageEditor() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  }, [id, editor, canEdit])
+  }, [id, editor, canEdit, editorType])
 
   // 加载页面
   useEffect(() => {
@@ -169,8 +273,17 @@ export default function PageEditor() {
         setVisibility(page.visibility ?? 'private')
         setCreatedAt(page.createdAt ?? page.created_at)
         setUpdatedAt(page.updatedAt ?? page.updated_at)
-        if (editor) {
-          editor.commands.setContent(page.content || '')
+        const rawContent = page.content || ''
+        // 自动检测编辑器类型：HTML 以 < 开头为富文本，否则为 Markdown
+        const trimmed = rawContent.trim()
+        if (trimmed.startsWith('<')) {
+          setEditorType('richtext')
+          if (editor) {
+            editor.commands.setContent(rawContent)
+          }
+        } else {
+          setEditorType('markdown')
+          setMarkdownContent(rawContent)
         }
         setLoading(false)
       })
@@ -192,6 +305,48 @@ export default function PageEditor() {
       await updatePage(id!, { visibility: newVis })
     } catch {
       setVisibility(visibility)
+    }
+  }
+
+  const loadVersions = async () => {
+    if (!id) return
+    setVersionsLoading(true)
+    try {
+      const data = await fetchPageVersions(id)
+      setVersions(data.versions || data || [])
+    } catch {
+      setVersions([])
+    } finally {
+      setVersionsLoading(false)
+    }
+  }
+
+  const handleRestore = async (versionId: number) => {
+    if (!id) return
+    setRestoreConfirmId(null)
+    setSaving(true)
+    try {
+      await restorePageVersion(id, versionId)
+      // 重新加载页面内容
+      const page = await fetchPage(id)
+      setTitle(page.title)
+      setUpdatedAt(page.updatedAt ?? page.updated_at)
+      const rawContent = page.content || ''
+      const trimmed = rawContent.trim()
+      if (trimmed.startsWith('<')) {
+        setEditorType('richtext')
+        if (editor) {
+          editor.commands.setContent(rawContent)
+        }
+      } else {
+        setEditorType('markdown')
+        setMarkdownContent(rawContent)
+      }
+      setShowVersions(false)
+    } catch {
+      // ignore
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -278,6 +433,39 @@ export default function PageEditor() {
           {saving && <span className="page-editor-saving">保存中...</span>}
         </div>
 
+        {/* 编辑器类型切换 */}
+        {canEdit && (
+          <div className="pe-editor-toggle">
+            <button
+              className={`pe-toggle-btn ${editorType === 'richtext' ? 'pe-toggle-btn--active' : ''}`}
+              onClick={() => setEditorType('richtext')}
+            >
+              富文本
+            </button>
+            <button
+              className={`pe-toggle-btn ${editorType === 'markdown' ? 'pe-toggle-btn--active' : ''}`}
+              onClick={() => setEditorType('markdown')}
+            >
+              Markdown
+            </button>
+          </div>
+        )}
+
+        {/* 版本历史按钮 */}
+        <button
+          className={`pe-btn ${showVersions ? 'pe-btn--active' : ''}`}
+          onClick={() => {
+            if (!showVersions) loadVersions()
+            setShowVersions(!showVersions)
+          }}
+          title="版本历史"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12 6 12 12 16 14" />
+          </svg>
+        </button>
+
         {/* 可见性切换（仅作者可见） */}
         {isAuthor && (
           <button className={`pe-vis-toggle ${visibility === 'public' ? 'pe-vis-public' : ''}`} onClick={toggleVisibility} title="切换可见性">
@@ -351,9 +539,33 @@ export default function PageEditor() {
             placeholder="无标题文档"
             readOnly={!canEdit}
           />
-          <div className={`page-editor-wrapper ${!canEdit ? 'page-editor-wrapper--readonly' : ''}`}>
-            <EditorContent editor={editor} />
-          </div>
+          {editorType === 'richtext' ? (
+            <div className={`page-editor-wrapper ${!canEdit ? 'page-editor-wrapper--readonly' : ''}`}>
+              <EditorContent editor={editor} />
+            </div>
+          ) : (
+            <div className="markdown-split-pane">
+              {canEdit ? (
+                <>
+                  <textarea
+                    className="markdown-editor-textarea"
+                    value={markdownContent}
+                    onChange={(e) => {
+                      setMarkdownContent(e.target.value)
+                      scheduleSave()
+                    }}
+                    placeholder="输入 Markdown 内容..."
+                    spellCheck={false}
+                  />
+                  <div className="markdown-split-divider" />
+                </>
+              ) : null}
+              <div
+                className={`markdown-preview ${!canEdit ? 'markdown-preview--full' : ''}`}
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(markdownContent) }}
+              />
+            </div>
+          )}
         </div>
       </div>
 
@@ -376,6 +588,78 @@ export default function PageEditor() {
           />
         </>
       )}
+
+      {/* 版本历史面板 */}
+      {showVersions && <div className="comment-overlay" onClick={() => { setShowVersions(false); setRestoreConfirmId(null) }} />}
+      <div className={`comment-panel version-panel ${showVersions ? 'comment-panel--open' : ''}`}>
+        <div className="comment-panel-header">
+          <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+            版本历史
+          </h3>
+          <button className="comment-panel-close" onClick={() => { setShowVersions(false); setRestoreConfirmId(null) }} aria-label="关闭">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div className="comment-panel-body">
+          <div className="comment-list">
+            {versionsLoading ? (
+              <div className="comment-empty">加载中...</div>
+            ) : versions.length === 0 ? (
+              <div className="comment-empty">暂无版本历史</div>
+            ) : (
+              versions.map((v) => (
+                <div key={v.id} className="version-item">
+                  <div className="version-info">
+                    <div className="version-header">
+                      <span className="version-number">版本 {v.version}</span>
+                      {v.isRollback && <span className="version-rollback-badge">已恢复</span>}
+                    </div>
+                    <div className="version-meta">
+                      <span className="version-author">{v.authorName || '未知用户'}</span>
+                      <span className="comment-time">{formatDate(v.createdAt)}</span>
+                    </div>
+                  </div>
+                  {canEdit && (
+                    <div className="version-actions">
+                      {restoreConfirmId === v.id ? (
+                        <div className="version-confirm">
+                          <span className="version-confirm-text">确认恢复到此版本？</span>
+                          <button
+                            className="version-confirm-btn version-confirm-btn--yes"
+                            onClick={() => handleRestore(v.id)}
+                          >
+                            确认
+                          </button>
+                          <button
+                            className="version-confirm-btn"
+                            onClick={() => setRestoreConfirmId(null)}
+                          >
+                            取消
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          className="version-restore-btn"
+                          onClick={() => setRestoreConfirmId(v.id)}
+                        >
+                          恢复到此版本
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }

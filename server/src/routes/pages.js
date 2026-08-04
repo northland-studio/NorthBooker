@@ -2,6 +2,7 @@ import { Router } from 'express'
 import crypto from 'node:crypto'
 import db from '../database.js'
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth.js'
+import bus from '../bus.js'
 
 const router = Router()
 
@@ -75,6 +76,36 @@ router.get('/tree', optionalAuthMiddleware, (req, res) => {
   res.json(buildTree(rows))
 })
 
+// GET /api/pages/:id/versions — 获取版本列表
+router.get('/:id/versions', (req, res) => {
+  const page = db.prepare('SELECT id FROM pages WHERE id = ?').get(req.params.id)
+  if (!page) return res.status(404).json({ error: 'Page not found' })
+
+  const versions = db.prepare(
+    'SELECT pv.*, u.username as author_name FROM page_versions pv LEFT JOIN users u ON pv.author_id = u.id WHERE pv.page_id = ? ORDER BY pv.created_at DESC'
+  ).all(req.params.id)
+  res.json(versions)
+})
+
+// POST /api/pages/:id/versions/:versionId/restore — 回滚到指定版本
+router.post('/:id/versions/:versionId/restore', authMiddleware, (req, res) => {
+  const page = db.prepare('SELECT * FROM pages WHERE id = ?').get(req.params.id)
+  if (!page) return res.status(404).json({ error: 'Page not found' })
+
+  const version = db.prepare('SELECT * FROM page_versions WHERE id = ? AND page_id = ?').get(req.params.versionId, req.params.id)
+  if (!version) return res.status(404).json({ error: 'Version not found' })
+
+  // Save current state as a version (rollback snapshot)
+  db.prepare('INSERT INTO page_versions (page_id, title, content, author_id, is_rollback) VALUES (?, ?, ?, ?, 1)')
+    .run(req.params.id, page.title, page.content, req.user?.id)
+
+  // Restore content
+  db.prepare('UPDATE pages SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(version.title, version.content, req.params.id)
+
+  res.json({ success: true })
+})
+
 // 获取单个页面（公开页所有人可看；私有页仅作者/管理员可看）
 router.get('/:id', optionalAuthMiddleware, (req, res) => {
   const row = db
@@ -118,6 +149,13 @@ router.put('/:id', authMiddleware, (req, res) => {
   const canEdit = page.author_id === req.user.id || req.user.level >= 1
   if (!canEdit) return res.status(403).json({ error: '只能编辑自己的文档' })
 
+  // Save version snapshot before update
+  const current = db.prepare('SELECT title, content, author_id FROM pages WHERE id = ?').get(req.params.id)
+  if (current) {
+    db.prepare('INSERT INTO page_versions (page_id, title, content, author_id) VALUES (?, ?, ?, ?)')
+      .run(req.params.id, current.title, current.content, current.author_id)
+  }
+
   const { title, content, parentId, visibility } = req.body
   const now = new Date().toISOString()
   db.prepare(
@@ -126,6 +164,7 @@ router.put('/:id', authMiddleware, (req, res) => {
      updated_at = ?
      WHERE id = ?`,
   ).run(title ?? null, content ?? null, parentId ?? null, visibility ?? null, now, req.params.id)
+  bus.emit('page:updated', { pageId: req.params.id })
   res.json({ success: true })
 })
 

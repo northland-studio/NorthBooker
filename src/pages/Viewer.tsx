@@ -5,6 +5,8 @@ import { useThemeStore } from '@/store/theme'
 import { fetchDocumentById } from '@/api/documents'
 import { getFileTypeLabel, formatSize, formatDate } from '@/utils/fileType'
 import { resolveUri } from '@/utils/url'
+import { createShareLink } from '@/api/share'
+import { fetchSubscription, subscribe, unsubscribe } from '@/api/subscriptions'
 import BookmarkButton from '@/components/BookmarkButton'
 import CommentPanel from '@/components/CommentPanel'
 import type { Document, FileType } from '@/types/document'
@@ -35,6 +37,21 @@ export default function Viewer() {
   const [officeBuffer, setOfficeBuffer] = useState<ArrayBuffer | null>(null)
   const copyTimer = useRef<ReturnType<typeof setTimeout>>()
 
+  // 分享模态框
+  const [shareOpen, setShareOpen] = useState(false)
+  const [sharePassword, setSharePassword] = useState('')
+  const [shareExpiration, setShareExpiration] = useState('')
+  const [shareUrl, setShareUrl] = useState('')
+  const [shareLoading, setShareLoading] = useState(false)
+  const [shareError, setShareError] = useState('')
+  const [shareCopied, setShareCopied] = useState(false)
+
+  // 订阅
+  const [subscribed, setSubscribed] = useState(false)
+  const [subLoading, setSubLoading] = useState(false)
+  const [toast, setToast] = useState('')
+  const toastTimer = useRef<ReturnType<typeof setTimeout>>()
+
   useEffect(() => {
     setDoc(null)
     setError(false)
@@ -58,6 +75,71 @@ export default function Viewer() {
       .catch(() => setError(true))
       .finally(() => setLoading(false))
   }, [id])
+
+  // 检查订阅状态
+  useEffect(() => {
+    if (!id) return
+    fetchSubscription(id)
+      .then((s) => setSubscribed(s.subscribed))
+      .catch(() => {})
+  }, [id])
+
+  const handleSubscribe = async () => {
+    if (!id) return
+    setSubLoading(true)
+    try {
+      if (subscribed) {
+        await unsubscribe(id)
+        setSubscribed(false)
+        showToast('已取消订阅')
+      } else {
+        await subscribe(id)
+        setSubscribed(true)
+        showToast('已订阅')
+      }
+    } catch { showToast('操作失败') }
+    finally { setSubLoading(false) }
+  }
+
+  const showToast = (msg: string) => {
+    setToast(msg)
+    clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(''), 2000)
+  }
+
+  const handleShareOpen = () => {
+    setShareUrl('')
+    setSharePassword('')
+    setShareExpiration('')
+    setShareError('')
+    setShareCopied(false)
+    setShareOpen(true)
+  }
+
+  const handleGenerateShare = async () => {
+    if (!id) return
+    setShareLoading(true)
+    setShareError('')
+    try {
+      const result = await createShareLink({
+        docId: id,
+        password: sharePassword || undefined,
+        expiration: shareExpiration || undefined,
+      })
+      setShareUrl(result.url)
+    } catch {
+      setShareError('生成分享链接失败')
+    } finally {
+      setShareLoading(false)
+    }
+  }
+
+  const handleCopyShareUrl = () => {
+    navigator.clipboard.writeText(shareUrl).then(() => {
+      setShareCopied(true)
+      setTimeout(() => setShareCopied(false), 2000)
+    })
+  }
 
   const previewDoc: PreviewDocument | null = useMemo(() => {
     if (!doc) return null
@@ -132,6 +214,24 @@ export default function Viewer() {
             )}
             <span>{copied ? '已复制' : '转发'}</span>
           </button>
+          <button className="viewer-share" onClick={handleShareOpen} aria-label="分享">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
+              <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+            </svg>
+            <span>分享</span>
+          </button>
+          <button
+            className={`viewer-share subscribe-btn ${subscribed ? 'subscribe-btn--active' : ''}`}
+            onClick={handleSubscribe}
+            disabled={subLoading}
+            aria-label={subscribed ? '取消订阅' : '订阅'}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill={subscribed ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+            </svg>
+          </button>
         </div>
       </div>
       <div className="viewer-body">
@@ -164,6 +264,62 @@ export default function Viewer() {
         open={showComments}
         onClose={() => setShowComments(false)}
       />
+
+      {/* Toast */}
+      {toast && <div className="toast">{toast}</div>}
+
+      {/* 分享链接模态框 */}
+      {shareOpen && (
+        <div className="dialog-mask" onClick={() => setShareOpen(false)}>
+          <div className="dialog-card" onClick={(e) => e.stopPropagation()}>
+            <div className="dialog-header">
+              <h3>生成分享链接</h3>
+              <button className="dialog-close" onClick={() => setShareOpen(false)}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            {shareError && <div className="form-error">{shareError}</div>}
+            <label className="form-label">
+              密码（可选）
+              <input
+                className="form-input"
+                type="text"
+                placeholder="留空表示无需密码"
+                value={sharePassword}
+                onChange={(e) => setSharePassword(e.target.value)}
+              />
+            </label>
+            <label className="form-label">
+              有效期
+              <select className="sort-select" style={{ width: '100%', marginTop: 6 }} value={shareExpiration} onChange={(e) => setShareExpiration(e.target.value)}>
+                <option value="">永不过期</option>
+                <option value="1h">1 小时</option>
+                <option value="1d">1 天</option>
+                <option value="7d">7 天</option>
+              </select>
+            </label>
+            {shareUrl ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input className="form-input" style={{ flex: 1, marginTop: 0 }} value={shareUrl} readOnly />
+                  <button className="btn-primary" style={{ margin: 0, whiteSpace: 'nowrap', padding: '10px 14px', fontSize: 13 }} onClick={handleCopyShareUrl}>
+                    {shareCopied ? '已复制' : '复制'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="dialog-actions">
+                <button className="btn-ghost" onClick={() => setShareOpen(false)}>取消</button>
+                <button className="btn-primary" style={{ margin: 0 }} onClick={handleGenerateShare} disabled={shareLoading}>
+                  {shareLoading ? '生成中...' : '生成链接'}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

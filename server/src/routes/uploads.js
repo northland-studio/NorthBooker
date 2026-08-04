@@ -14,6 +14,7 @@ import {
   qiniuConfig,
 } from '../qiniu.js'
 import logger from '../logger.js'
+import { generateAndUploadThumbnail } from '../thumbnail.js'
 
 const router = Router()
 
@@ -83,6 +84,9 @@ router.post('/callback', (req, res) => {
     `INSERT INTO documents (id, title, file_name, uri, type, size, updated_at, owner_id, folder_id, visibility)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'public')`,
   ).run(id, docTitle, fileName, uri, type, docSize, updatedAt, req.user.id, folder_id || null)
+
+  // 异步生成缩略图（fire-and-forget，不阻塞响应）
+  generateAndUploadThumbnail(id).catch(err => logger.error('upload', '缩略图生成异常', { error: err.message }))
 
   res.json({
     id,

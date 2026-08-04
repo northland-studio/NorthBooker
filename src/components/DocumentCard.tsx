@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import type { Document } from '@/types/document'
 import { getFileTypeLabel, formatSize, formatDate } from '@/utils/fileType'
@@ -5,13 +6,37 @@ import FileTypeIcon from './FileTypeIcon'
 import BookmarkButton from './BookmarkButton'
 
 // 文档卡片
-export default function DocumentCard({ doc }: { doc: Document }) {
+export default function DocumentCard({ doc, showCheckbox, checked, onToggle }: {
+  doc: Document
+  showCheckbox?: boolean
+  checked?: boolean
+  onToggle?: () => void
+}) {
+  const [imgLoaded, setImgLoaded] = useState(false)
+  const [imgError, setImgError] = useState(false)
+  const hasThumb = !!doc.thumbnail
+  const showThumb = hasThumb && !imgError && doc.type !== 'image'
+  const showImagePreview = doc.type === 'image'
+
   return (
     <div className="doc-card-wrapper">
       <Link to={`/viewer/${doc.id}`} className="doc-card" draggable={false}>
         <div className="doc-card-thumb">
-          {doc.type === 'image' ? (
+          {showImagePreview ? (
             <img src={doc.uri} alt={doc.title} loading="lazy" draggable={false} />
+          ) : showThumb ? (
+            <>
+              {!imgLoaded && <div className="doc-card-thumb-skeleton" />}
+              <img
+                src={doc.thumbnail}
+                alt={doc.title}
+                loading="lazy"
+                draggable={false}
+                style={{ display: imgLoaded ? undefined : 'none' }}
+                onLoad={() => setImgLoaded(true)}
+                onError={() => setImgError(true)}
+              />
+            </>
           ) : (
             <FileTypeIcon type={doc.type} />
           )}
@@ -27,7 +52,13 @@ export default function DocumentCard({ doc }: { doc: Document }) {
           </div>
         </div>
       </Link>
-      <BookmarkButton docId={doc.id} />
+      {showCheckbox && (
+        <label className="doc-card-check" onClick={(e) => e.stopPropagation()}>
+          <input type="checkbox" checked={checked} onChange={onToggle} />
+          <span className="doc-card-check-mark" />
+        </label>
+      )}
+      {!showCheckbox && <BookmarkButton docId={doc.id} />}
     </div>
   )
 }

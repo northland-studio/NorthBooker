@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, ipcMain, Menu, Tray, nativeImage, dialog } = require('electron')
+const { app, BrowserWindow, shell, ipcMain, Menu, Tray, nativeImage, dialog, Notification } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const Store = require('electron-store')
 const path = require('path')
@@ -23,6 +23,7 @@ const store = new Store({
     autoLaunch: false,
     minimizeToTray: true,
     fonts: { ui: '', title: '', content: '' },
+    themeColor: '#004AAD',
   },
 })
 
@@ -36,6 +37,27 @@ function buildFontCSS() {
   if (fonts.title) rules.push(`h1,h2,h3,.doc-card-title,.doc-list-title{font-family:"${fonts.title}",system-ui,sans-serif!important}`)
   if (fonts.content) rules.push(`p,.doc-card-body,.viewer-content{font-family:"${fonts.content}",system-ui,sans-serif!important}`)
   return rules.length ? `<style id="nb-font-css">${rules.join('')}</style>` : ''
+}
+
+// ===== 主题色注入 =====
+function injectThemeColor(color) {
+  if (!mainWindow) return
+  const hoverColor = lightenColor(color, -20)
+  mainWindow.webContents.executeJavaScript(`
+    (function(){
+      var r=document.documentElement;
+      r.style.setProperty('--color-primary','${color}');
+      r.style.setProperty('--color-primary-hover','${hoverColor}');
+    })();
+  `)
+}
+
+function lightenColor(hex, amount) {
+  const num = parseInt(hex.replace('#', ''), 16)
+  const r = Math.max(0, (num >> 16) - Math.abs(amount))
+  const g = Math.max(0, ((num >> 8) & 0x00FF) - Math.abs(amount))
+  const b = Math.max(0, (num & 0x0000FF) - Math.abs(amount))
+  return '#' + (0x1000000 + (r << 16) + (g << 8) + b).toString(16).slice(1)
 }
 
 // 云字体预设列表
@@ -263,6 +285,10 @@ function createWindow(port) {
   }
 
   mainWindow.loadURL(`http://127.0.0.1:${port}`)
+  const themeColor = store.get('themeColor')
+  if (themeColor && themeColor !== '#004AAD') {
+    injectThemeColor(themeColor)
+  }
   setupAutoUpdater()
 }
 
@@ -343,6 +369,10 @@ ipcMain.handle('set-setting', (_, key, value) => {
   // 开机自启动
   if (key === 'autoLaunch') {
     app.setLoginItemSettings({ openAtLogin: value })
+  }
+  // 主题色变更时注入 CSS 变量
+  if (key === 'themeColor' && mainWindow) {
+    injectThemeColor(value)
   }
   return store.get(key)
 })
@@ -599,6 +629,58 @@ ipcMain.handle('check-update', checkUpdatesDualSource)
 ipcMain.handle('download-update', () => activeUpdater?.downloadUpdate())
 ipcMain.handle('install-update', () => activeUpdater?.quitAndInstall())
 
+// ===== WebSocket 通知客户端 =====
+let wsClient = null
+
+function connectWebSocket() {
+  try {
+    const WebSocket = require('ws')
+    wsClient = new WebSocket('wss://northbooker.xuanjian.top')
+
+    wsClient.on('open', () => {
+      console.log('[通知] WebSocket 已连接')
+    })
+
+    wsClient.on('message', (data) => {
+      try {
+        const msg = JSON.parse(data.toString())
+        console.log('[通知] 收到消息:', msg)
+
+        // 文档更新通知
+        if (Notification.isSupported() && msg.type === 'update') {
+          const notification = new Notification({
+            title: '北牖 文档更新',
+            body: `《${msg.title}》已被更新`,
+            icon: iconPath,
+          })
+
+          notification.on('click', () => {
+            if (mainWindow) {
+              mainWindow.show()
+              mainWindow.focus()
+            }
+          })
+          notification.show()
+        }
+      } catch (e) {
+        console.error('[通知] 消息解析失败:', e.message)
+      }
+    })
+
+    wsClient.on('close', () => {
+      console.log('[通知] WebSocket 断开，5秒后重连')
+      setTimeout(connectWebSocket, 5000)
+    })
+
+    wsClient.on('error', (err) => {
+      console.error('[通知] WebSocket 错误:', err.message)
+    })
+  } catch (e) {
+    console.error('[通知] WebSocket 连接失败:', e.message)
+    setTimeout(connectWebSocket, 5000)
+  }
+}
+
 // ===== 应用生命周期 =====
 Menu.setApplicationMenu(null)
 
@@ -607,7 +689,10 @@ app.whenReady().then(async () => {
   app.port = port
   createTray()
   createWindow(port)
-  setTimeout(() => checkUpdatesDualSource(), 5000)
+  setTimeout(() => {
+    checkUpdatesDualSource()
+    connectWebSocket()
+  }, 5000)
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(port) })
 })
 

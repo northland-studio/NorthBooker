@@ -1,6 +1,6 @@
 {
   "name": "northbooker-desktop",
-  "version": "2.2.2",
+  "version": "2.3.0",
   "description": "北牖 NorthBooker 桌面版 - 云端文档查看与在线协作",
   "author": "北域工作室 <morzane_work@foxmail.com>",
   "license": "MIT",
@@ -11,7 +11,8 @@
   },
   "dependencies": {
     "electron-store": "^8.1.0",
-    "electron-updater": "^6.3.9"
+    "electron-updater": "^6.3.9",
+    "ws": "^8.21.2"
   },
   "devDependencies": {
     "electron": "^31.4.0",
@@ -37,16 +38,23 @@
     },
     "artifactName": "${name}-${version}.${ext}",
     "win": {
-      "target": ["nsis"],
+      "target": [
+        "nsis"
+      ],
       "icon": "icon.png"
     },
     "mac": {
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "icon": "icon.png",
       "category": "public.app-category.productivity"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "icon": "icon.png",
       "category": "Office"
     },

@@ -69,6 +69,17 @@ db.exec(`
     FOREIGN KEY (author_id) REFERENCES users(id)
   );
 
+  CREATE TABLE IF NOT EXISTS page_versions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    page_id TEXT NOT NULL,
+    title TEXT NOT NULL DEFAULT '',
+    content TEXT NOT NULL DEFAULT '',
+    author_id INTEGER,
+    is_rollback INTEGER NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(page_id) REFERENCES pages(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS folders (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -77,7 +88,66 @@ db.exec(`
     created_at TEXT NOT NULL,
     FOREIGN KEY (parent_id) REFERENCES folders(id) ON DELETE CASCADE
   );
+
+  -- FTS5 全文搜索（外部内容表，使用 pages 的隐式 rowid 关联）
+  CREATE VIRTUAL TABLE IF NOT EXISTS page_fts USING fts5(
+    content, title,
+    content=pages,
+    content_rowid=rowid
+  );
+
+  -- 触发器：pages 插入时同步 FTS 索引
+  CREATE TRIGGER IF NOT EXISTS page_fts_ai AFTER INSERT ON pages BEGIN
+    INSERT INTO page_fts(rowid, content, title) VALUES (new.rowid, new.content, new.title);
+  END;
+
+  -- 触发器：pages 删除时同步 FTS 索引
+  CREATE TRIGGER IF NOT EXISTS page_fts_ad AFTER DELETE ON pages BEGIN
+    INSERT INTO page_fts(page_fts, rowid, content, title) VALUES ('delete', old.rowid, old.content, old.title);
+  END;
+
+  -- 触发器：pages 更新时重建 FTS 索引
+  CREATE TRIGGER IF NOT EXISTS page_fts_au AFTER UPDATE ON pages BEGIN
+    INSERT INTO page_fts(page_fts, rowid, content, title) VALUES ('delete', old.rowid, old.content, old.title);
+    INSERT INTO page_fts(rowid, content, title) VALUES (new.rowid, new.content, new.title);
+  END;
+
+  CREATE TABLE IF NOT EXISTS share_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token TEXT NOT NULL UNIQUE,
+    doc_id TEXT NOT NULL,
+    password_hash TEXT DEFAULT NULL,
+    expires_at DATETIME DEFAULT NULL,
+    created_by INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_share_links_token ON share_links(token);
+
+  CREATE TABLE IF NOT EXISTS subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    target_type TEXT NOT NULL DEFAULT 'document',
+    target_id TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user_id, target_type, target_id)
+  );
 `)
+
+// 迁移：为已有的 page_fts 重新索引全部 pages（仅当 FTS 表为空时）
+try {
+  const ftsCount = db.prepare('SELECT COUNT(*) AS c FROM page_fts').get()
+  if (ftsCount.c === 0) {
+    const allPages = db.prepare('SELECT rowid, title, content FROM pages').all()
+    if (allPages.length > 0) {
+      const insertFts = db.prepare('INSERT INTO page_fts(rowid, title, content) VALUES (?, ?, ?)')
+      const tx = db.transaction((rows) => rows.forEach((r) => insertFts.run(r.rowid, r.title, r.content)))
+      tx(allPages)
+      logger.info('db', `已为 ${allPages.length} 个页面建立全文索引`)
+    }
+  }
+} catch (e) {
+  logger.warn('db', `FTS 索引迁移失败: ${e.message}`)
+}
 
 // 迁移：为已有的 pages 表补充 visibility 列（v0.2.0+）
 try {

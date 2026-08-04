@@ -6,6 +6,7 @@ import { fetchFolders, createFolder, deleteFolder } from '@/api/folders'
 import type { Folder } from '@/api/folders'
 import type { Document, FileType } from '@/types/document'
 import { resolveUri } from '@/utils/url'
+import { searchDocuments, type SearchResult } from '@/api/search'
 import DocumentCard from '@/components/DocumentCard'
 import FolderCard from '@/components/FolderCard'
 import PathBar from '@/components/PathBar'
@@ -83,6 +84,18 @@ export default function Documents() {
   const user = useAuthStore((s) => s.user)
   const canUpload = isAdmin(user)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  // 全文搜索
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [searching, setSearching] = useState(false)
+  const searchRef = useRef<HTMLDivElement>(null)
+
+  // 批量选择
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [moveFolderOpen, setMoveFolderOpen] = useState(false)
 
   const load = useCallback(() => {
     setLoading(true)
@@ -287,6 +300,94 @@ export default function Documents() {
     setCtxMenu({ x: e.clientX, y: e.clientY, type, id, title })
   }
 
+  // === 全文搜索 ===
+  const handleSearch = useCallback(async (q: string) => {
+    const trimmed = q.trim()
+    if (!trimmed) {
+      setSearchResults([])
+      setSearchOpen(false)
+      return
+    }
+    setSearching(true)
+    setSearchOpen(true)
+    try {
+      const results = await searchDocuments(trimmed)
+      setSearchResults(results)
+    } catch {
+      setSearchResults([])
+    } finally {
+      setSearching(false)
+    }
+  }, [])
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') handleSearch(searchQuery)
+    else if (e.key === 'Escape') { setSearchOpen(false); setSearchResults([]) }
+  }
+
+  // 搜索结果项点击
+  const handleSearchResultClick = (r: SearchResult) => {
+    setSearchOpen(false)
+    setSearchResults([])
+    setSearchQuery('')
+    if (r.type === 'document') navigate(`/viewer/${r.id}`)
+    else window.open(`/pages/${r.id}`, '_blank')
+  }
+
+  // 搜索外点击关闭
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setSearchOpen(false)
+        setSearchResults([])
+      }
+    }
+    if (searchOpen) {
+      document.addEventListener('mousedown', handler)
+      return () => document.removeEventListener('mousedown', handler)
+    }
+  }, [searchOpen])
+
+  // === 批量操作 ===
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  const selectAll = () => {
+    const allIds = new Set(filtered.map((d) => d.id))
+    setSelectedIds(allIds)
+  }
+
+  const clearSelection = () => {
+    setSelectedIds(new Set())
+    setSelectMode(false)
+  }
+
+  const handleBatchMove = async (folderId: string | null) => {
+    setMoveFolderOpen(false)
+    const ids = Array.from(selectedIds)
+    try {
+      await Promise.all(ids.map((id) => moveDocument(id, folderId)))
+      load()
+      clearSelection()
+    } catch { alert('移动失败') }
+  }
+
+  const handleBatchDelete = async () => {
+    if (!confirm(`确定要删除选中的 ${selectedIds.size} 个文档吗？`)) return
+    const ids = Array.from(selectedIds)
+    try {
+      const client = (await import('@/api/client')).default
+      await Promise.all(ids.map((id) => client.delete(`/admin/documents/${id}`)))
+      load()
+      clearSelection()
+    } catch { alert('删除失败') }
+  }
+
   return (
     <div
       className="documents-page"
@@ -299,9 +400,62 @@ export default function Documents() {
       <PathBar path={pathStack} onNavigate={navigateTo} />
 
       <div className="documents-toolbar">
+        <div className="global-search-wrap" ref={searchRef}>
+          <input
+            className="search-input global-search-input"
+            placeholder="全文搜索..."
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); if (!e.target.value.trim()) { setSearchResults([]); setSearchOpen(false) } }}
+            onKeyDown={handleSearchKeyDown}
+          />
+          <button className="global-search-btn" onClick={() => handleSearch(searchQuery)} title="搜索">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </button>
+          {searchOpen && (
+            <div className="search-results-dropdown">
+              {searching ? (
+                <div className="search-results-empty">搜索中...</div>
+              ) : searchResults.length === 0 ? (
+                <div className="search-results-empty">无结果</div>
+              ) : (
+                searchResults.map((r) => (
+                  <button key={`${r.type}-${r.id}`} className="search-result-item" onClick={() => handleSearchResultClick(r)}>
+                    <span className="search-result-icon">
+                      {r.type === 'document' ? (
+                        <FileTypeIcon type="other" />
+                      ) : (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><polyline points="14 2 14 8 20 8" />
+                        </svg>
+                      )}
+                    </span>
+                    <span className="search-result-body">
+                      <span className="search-result-title">{r.title}</span>
+                      <span className="search-result-snippet" dangerouslySetInnerHTML={{ __html: r.snippet }} />
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+        <button
+          className={`btn-ghost ${selectMode ? 'btn-ghost--active' : ''}`}
+          onClick={selectMode ? clearSelection : () => setSelectMode(true)}
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
+          </svg>
+          {selectMode ? '取消选择' : '选择'}
+        </button>
+        {selectMode && selectedIds.size > 0 && (
+          <button className="btn-ghost" onClick={selectAll}>全选</button>
+        )}
         <input
           className="search-input"
-          placeholder="搜索文档..."
+          placeholder="过滤文档..."
           value={keyword}
           onChange={(e) => { setKeyword(e.target.value); setFocusIndex(-1) }}
         />
@@ -403,15 +557,21 @@ export default function Documents() {
             return (
               <div
                 key={d.id}
-                className={`doc-list-row ${focusIndex === globalIdx ? 'doc-list-row--focus' : ''}`}
+                className={`doc-list-row ${focusIndex === globalIdx ? 'doc-list-row--focus' : ''} ${selectMode ? 'doc-list-row--selectable' : ''}`}
                 onContextMenu={(e) => handleContextMenu(e, 'doc', d.id, d.title)}
                 draggable
                 onDragStart={(e) => handleDragStart(e, d.id)}
               >
+                {selectMode && (
+                  <label className="doc-list-check" onClick={(e) => e.stopPropagation()}>
+                    <input type="checkbox" checked={selectedIds.has(d.id)} onChange={() => toggleSelect(d.id)} />
+                    <span className="doc-list-check-mark" />
+                  </label>
+                )}
                 <Link to={`/viewer/${d.id}`} className="doc-list-cell doc-list-cell--name" draggable={false}
                   onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); handleContextMenu(e, 'doc', d.id, d.title) }}>
-                  {d.type === 'image' ? (
-                    <img className="doc-list-thumb" src={resolveUri(d.uri)} alt={d.title} />
+                  {d.type === 'image' || d.thumbnail ? (
+                    <img className="doc-list-thumb" src={d.thumbnail || resolveUri(d.uri)} alt={d.title} />
                   ) : (
                     <span className="doc-list-thumb doc-list-thumb--icon"><FileTypeIcon type={d.type} /></span>
                   )}
@@ -420,7 +580,9 @@ export default function Documents() {
                 <span className="doc-list-cell doc-list-cell--type"><span className="doc-tag">{getFileTypeLabel(d.type)}</span></span>
                 <span className="doc-list-cell doc-list-cell--size">{formatSize(d.size)}</span>
                 <span className="doc-list-cell doc-list-cell--date">{formatDate(d.updatedAt)}</span>
-                <span className="doc-list-cell doc-list-cell--actions"><BookmarkButton docId={d.id} /></span>
+                <span className="doc-list-cell doc-list-cell--actions">
+                  {!selectMode && <BookmarkButton docId={d.id} />}
+                </span>
               </div>
             )
           })}
@@ -443,7 +605,12 @@ export default function Documents() {
               <div key={d.id} className={focusIndex === globalIdx ? 'doc-card-focus' : ''}
                 onContextMenu={(e) => handleContextMenu(e, 'doc', d.id, d.title)}
                 draggable onDragStart={(e) => handleDragStart(e, d.id)}>
-                <DocumentCard doc={d} />
+                <DocumentCard
+                  doc={d}
+                  showCheckbox={selectMode}
+                  checked={selectedIds.has(d.id)}
+                  onToggle={() => toggleSelect(d.id)}
+                />
               </div>
             )
           })}
@@ -452,6 +619,53 @@ export default function Documents() {
 
       {showUpload && (
         <UploadDialog onClose={() => setShowUpload(false)} onUploaded={() => load()} folderId={currentFolderId} />
+      )}
+
+      {/* 批量操作浮动栏 */}
+      {selectMode && selectedIds.size > 0 && (
+        <div className="batch-bar">
+          <span className="batch-bar-count">已选择 {selectedIds.size} 项</span>
+          <button className="btn-ghost" onClick={() => setMoveFolderOpen(true)}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+            </svg>
+            移动到文件夹
+          </button>
+          {canUpload && (
+            <button className="btn-ghost" style={{ color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }} onClick={handleBatchDelete}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+              删除
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* 移动到文件夹对话框 */}
+      {moveFolderOpen && (
+        <div className="dialog-mask" onClick={() => setMoveFolderOpen(false)}>
+          <div className="dialog-card" onClick={(e) => e.stopPropagation()}>
+            <div className="dialog-header">
+              <h3>移动到文件夹</h3>
+              <button className="dialog-close" onClick={() => setMoveFolderOpen(false)}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
+              <button className="ctx-menu-item" onClick={() => handleBatchMove(null)}>
+                📁 根目录（全部文档）
+              </button>
+              {folders.map((f) => (
+                <button key={f.id} className="ctx-menu-item" onClick={() => handleBatchMove(f.id)}>
+                  📁 {f.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* 右键菜单 */}

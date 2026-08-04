@@ -13,6 +13,9 @@ import foldersRouter from './routes/folders.js'
 import logRouter from './routes/log.js'
 import updatesRouter from './routes/updates.js'
 import downloadRouter from './routes/download.js'
+import searchRouter from './routes/search.js'
+import shareRouter from './routes/share.js'
+import subscriptionsRouter from './routes/subscriptions.js'
 
 const app = express()
 
@@ -50,6 +53,9 @@ app.use('/api/folders', foldersRouter)
 app.use('/api/log', logRouter)
 app.use('/api/updates', updatesRouter)
 app.use('/api/download', downloadRouter)
+app.use('/api/search', searchRouter)
+app.use('/api/share', shareRouter)
+app.use('/api/subscriptions', subscriptionsRouter)
 
 // 健康检查
 app.get('/api/health', (req, res) => {

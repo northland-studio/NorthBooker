@@ -5,6 +5,7 @@ interface Settings {
   autoLaunch: boolean
   minimizeToTray: boolean
   fonts: { ui: string; title: string; content: string }
+  themeColor: string
 }
 
 interface CloudFont {
@@ -94,6 +95,8 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
       // 错误由事件处理
     }
   }
+
+  const presetColors = ['#004AAD', '#E74C3C', '#27AE60', '#F39C12', '#8E44AD', '#1ABC9C', '#2C3E50', '#E91E63']
 
   const FontRow = ({ label, field }: { label: string; field: keyof Settings['fonts'] }) => {
     const selected = getSelectedCloudFont(field)
@@ -187,6 +190,34 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
           <FontRow label="界面字体" field="ui" />
           <FontRow label="标题字体" field="title" />
           <FontRow label="内容字体" field="content" />
+
+          {/* 主题色 */}
+          <div className="settings-section-title">主题色</div>
+          <div className="settings-color-presets">
+            {presetColors.map((color) => (
+              <button
+                key={color}
+                className={`settings-color-preset${settings.themeColor === color ? ' settings-color-preset--active' : ''}`}
+                style={{ backgroundColor: color }}
+                title={color}
+                onClick={() => {
+                  setSettings({ ...settings, themeColor: color })
+                  api.setSetting('themeColor', color)
+                }}
+              />
+            ))}
+            <input
+              type="color"
+              className="settings-color-input"
+              value={settings.themeColor || '#004AAD'}
+              onChange={(e) => {
+                const color = e.target.value
+                setSettings({ ...settings, themeColor: color })
+                api.setSetting('themeColor', color)
+              }}
+              title="自定义颜色"
+            />
+          </div>
 
           {/* 更新检测 */}
           <div className="settings-section-title">版本更新</div>

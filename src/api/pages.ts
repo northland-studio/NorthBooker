@@ -40,3 +40,15 @@ export async function movePage(id: string, body: { parentId?: string; sortOrder?
   const { data } = await client.patch(`/pages/${id}/move`, body)
   return data
 }
+
+// 获取页面版本历史
+export async function fetchPageVersions(id: string) {
+  const { data } = await client.get(`/pages/${id}/versions`)
+  return data
+}
+
+// 恢复版本
+export async function restorePageVersion(id: string, versionId: number | string) {
+  const { data } = await client.post(`/pages/${id}/versions/${versionId}/restore`)
+  return data
+}
