@@ -65,6 +65,11 @@ export default function PageEditor() {
   const [versionsLoading, setVersionsLoading] = useState(false)
   const [restoreConfirmId, setRestoreConfirmId] = useState<number | null>(null)
   const [ttsPlaying, setTtsPlaying] = useState(false)
+  const [ttsEnabled, setTtsEnabled] = useState(true)
+  const electronAPI = (window as any).electronAPI
+  const isApp = !!electronAPI?.isElectron
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const ttsSourceRef = useRef<AudioBufferSourceNode | null>(null)
   const saveTimer = useRef<ReturnType<typeof setTimeout>>()
   // 用 ref 解决 useCallback 闭包陷阱：scheduleSave（空依赖）调用的 doSave 需要最新的状态
   const titleRef = useRef(title)
@@ -272,19 +277,73 @@ export default function PageEditor() {
     })
   }
 
-  // TTS 朗读文档内容
-  const handleTTS = () => {
-    if (ttsPlaying) {
-      window.speechSynthesis.cancel()
-      setTtsPlaying(false)
+  // 加载 TTS 配置（仅应用版）
+  useEffect(() => {
+    if (!isApp || !electronAPI) return
+    electronAPI.getSettings().then((s: any) => {
+      if (s?.tts) setTtsEnabled(s.tts.enabled !== false)
+    })
+  }, [isApp])
+
+  // TTS 停止朗读
+  const stopTTS = useCallback(() => {
+    if (window.speechSynthesis) window.speechSynthesis.cancel()
+    try { ttsSourceRef.current?.stop() } catch {}
+    ttsSourceRef.current = null
+    setTtsPlaying(false)
+  }, [])
+
+  // 组件卸载时停止朗读
+  useEffect(() => () => stopTTS(), [stopTTS])
+
+  const base64ToArrayBuffer = (b64: string) => {
+    const bin = atob(b64)
+    const buf = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i)
+    return buf.buffer
+  }
+
+  // TTS 朗读文档（从光标位置开始读）
+  const handleTTS = async () => {
+    if (ttsPlaying) { stopTTS(); return }
+    if (!editor) return
+    const from = editor.state.selection.from
+    const text = editor.state.doc.textBetween(from, editor.state.doc.content.size, '\n')
+    if (!text.trim()) return
+    let ttsCfg = { enabled: true, speed: 0.9, model: 'edge' }
+    if (isApp && electronAPI) {
+      const s = await electronAPI.getSettings()
+      ttsCfg = { ...ttsCfg, ...(s?.tts || {}) }
+    }
+    // sherpa-onnx 本地合成
+    if (isApp && ttsCfg.model !== 'edge') {
+      setTtsPlaying(true)
+      try {
+        const res = await electronAPI.ttsSynthesize({
+          text,
+          model: ttsCfg.model,
+          speed: Number(ttsCfg.speed) || 1.0,
+        })
+        if (res?.error || !res?.wav) { stopTTS(); return }
+        if (!audioCtxRef.current) audioCtxRef.current = new AudioContext()
+        const ctx = audioCtxRef.current
+        await ctx.resume()
+        const buf = await ctx.decodeAudioData(base64ToArrayBuffer(res.wav))
+        const source = ctx.createBufferSource()
+        source.buffer = buf
+        source.connect(ctx.destination)
+        source.onended = () => { ttsSourceRef.current = null; setTtsPlaying(false) }
+        ttsSourceRef.current = source
+        source.start()
+      } catch {
+        stopTTS()
+      }
       return
     }
-    if (!editor) return
-    const text = editor.state.doc.textContent
-    if (!text.trim()) return
+    // Web Speech API（Edge 内置）
     const utterance = new SpeechSynthesisUtterance(text)
     utterance.lang = 'zh-CN'
-    utterance.rate = 0.9
+    utterance.rate = Number(ttsCfg.speed) || 0.9
     utterance.onend = () => setTtsPlaying(false)
     utterance.onerror = () => setTtsPlaying(false)
     setTtsPlaying(true)
@@ -367,27 +426,29 @@ export default function PageEditor() {
           {saving && <span className="page-editor-saving">保存中...</span>}
         </div>
 
-        {/* TTS 朗读按钮 */}
-        <button
-          className={`pe-btn ${ttsPlaying ? 'pe-btn--active' : ''}`}
-          onClick={handleTTS}
-          title={ttsPlaying ? '停止朗读' : '朗读文档'}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            {ttsPlaying ? (
-              <>
-                <rect x="6" y="4" width="4" height="16" />
-                <rect x="14" y="4" width="4" height="16" />
-              </>
-            ) : (
-              <>
-                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-              </>
-            )}
-          </svg>
-        </button>
+        {/* TTS 朗读按钮（仅应用版可见） */}
+        {isApp && ttsEnabled && (
+          <button
+            className={`pe-btn ${ttsPlaying ? 'pe-btn--active' : ''}`}
+            onClick={handleTTS}
+            title={ttsPlaying ? '停止朗读' : '朗读文档'}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              {ttsPlaying ? (
+                <>
+                  <rect x="6" y="4" width="4" height="16" />
+                  <rect x="14" y="4" width="4" height="16" />
+                </>
+              ) : (
+                <>
+                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                </>
+              )}
+            </svg>
+          </button>
+        )}
 
         {/* 版本历史按钮 */}
         <button

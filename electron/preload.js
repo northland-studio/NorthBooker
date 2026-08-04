@@ -25,6 +25,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   loadCloudFont: (info) => ipcRenderer.invoke('load-cloud-font', info),
   pickLocalFont: () => ipcRenderer.invoke('pick-local-font'),
 
+  // TTS 朗读
+  ttsGetModels: () => ipcRenderer.invoke('tts-get-models'),
+  ttsModelStatus: (id) => ipcRenderer.invoke('tts-model-status', id),
+  ttsDownloadModel: (id) => ipcRenderer.invoke('tts-download-model', id),
+  ttsSynthesize: (opts) => ipcRenderer.invoke('tts-synthesize', opts),
+  onTtsModelProgress: (cb) => ipcRenderer.on('tts-model-progress', (_, p) => cb(p)),
+
   // 更新
   checkUpdate: () => ipcRenderer.invoke('check-update'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),

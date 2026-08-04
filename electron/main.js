@@ -9,6 +9,7 @@ const url = require('url')
 
 const SITE_URL = 'https://northbooker.xuanjian.top'
 const CDN_URL = 'https://northbooker.xuanjian.top/api/updates/'
+const tts = require('./tts.js')
 
 let mainWindow
 let httpServer
@@ -24,6 +25,7 @@ const store = new Store({
     minimizeToTray: true,
     fonts: { ui: '', title: '', content: '' },
     themeColor: '#004AAD',
+    tts: { enabled: true, speed: 0.9, model: 'edge' },
   },
 })
 
@@ -379,6 +381,26 @@ ipcMain.handle('set-setting', (_, key, value) => {
 
 // ===== 云字体预设 =====
 ipcMain.handle('get-cloud-fonts', () => CLOUD_FONTS)
+
+// ===== TTS 朗读 IPC =====
+ipcMain.handle('tts-get-models', () =>
+  tts.TTS_MODELS.map(({ id, name }) => ({ id, name }))
+)
+ipcMain.handle('tts-model-status', (_, id) => tts.isModelReady(id))
+ipcMain.handle('tts-download-model', async (_, id) => {
+  try {
+    await tts.ensureModel(id, (percent) => {
+      mainWindow?.webContents.send('tts-model-progress', { id, percent })
+    })
+    mainWindow?.webContents.send('tts-model-progress', { id, percent: 100 })
+    return { success: true }
+  } catch (e) {
+    return { error: e.message || String(e) }
+  }
+})
+ipcMain.handle('tts-synthesize', (_, { text, model, speed }) =>
+  tts.synthesize(String(text || ''), model, speed)
+)
 
 ipcMain.handle('load-cloud-font', async (_, { family, url }) => {
   if (!url) { injectFontCSS(''); return }

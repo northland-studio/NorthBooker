@@ -6,6 +6,7 @@ interface Settings {
   minimizeToTray: boolean
   fonts: { ui: string; title: string; content: string }
   themeColor: string
+  tts?: { enabled: boolean; speed: number; model: string }
 }
 
 interface CloudFont {
@@ -14,7 +15,13 @@ interface CloudFont {
   url?: string
 }
 
+interface TtsModel {
+  id: string
+  name: string
+}
+
 type UpdateStatus = 'idle' | 'checking' | 'no-update' | 'found' | 'error'
+type TtsModelStatus = 'unknown' | 'ready' | 'downloading' | 'error'
 
 // Electron 桌面端设置面板（字体、视图、托盘、开机启动、更新检测）
 export default function SettingsPanel({ onClose }: { onClose: () => void }) {
@@ -24,6 +31,10 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
   const [updateVersion, setUpdateVersion] = useState('')
   const [updateError, setUpdateError] = useState('')
   const [appVersion, setAppVersion] = useState('')
+  const [ttsModels, setTtsModels] = useState<TtsModel[]>([])
+  const [ttsModelStatus, setTtsModelStatus] = useState<TtsModelStatus>('unknown')
+  const [ttsModelPercent, setTtsModelPercent] = useState(0)
+  const [ttsModelError, setTtsModelError] = useState('')
   const api = (window as any).electronAPI
 
   useEffect(() => {
@@ -44,7 +55,56 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
       setUpdateStatus('error')
       setUpdateError(msg)
     })
+
+    // TTS 模型列表
+    api.ttsGetModels().then((models: TtsModel[]) => {
+      setTtsModels(models || [])
+      api.getSettings().then((s: Settings) => refreshModelStatus(s?.tts?.model))
+    })
+    api.onTtsModelProgress((p: { id: string; percent: number }) => {
+      setTtsModelPercent(p.percent)
+      if (p.percent >= 100) {
+        setTtsModelStatus('ready')
+      } else {
+        setTtsModelStatus('downloading')
+      }
+    })
   }, [])
+
+  const refreshModelStatus = async (model?: string) => {
+    const m = model || settings?.tts?.model
+    if (!m || m === 'edge') { setTtsModelStatus('unknown'); return }
+    try {
+      const ready = await api.ttsModelStatus(m)
+      setTtsModelStatus(ready ? 'ready' : 'unknown')
+    } catch {
+      setTtsModelStatus('unknown')
+    }
+  }
+
+  const updateTts = (key: string, value: any) => {
+    const ttsCfg = { enabled: true, speed: 0.9, model: 'edge', ...(settings!.tts || {}) }
+    const nextTts = { ...ttsCfg, [key]: value }
+    setSettings({ ...settings!, tts: nextTts })
+    api.setSetting('tts', nextTts)
+    if (key === 'model') refreshModelStatus()
+  }
+
+  const handleDownloadModel = async () => {
+    const model = settings?.tts?.model
+    if (!model || model === 'edge') return
+    setTtsModelStatus('downloading')
+    setTtsModelPercent(0)
+    setTtsModelError('')
+    const res = await api.ttsDownloadModel(model)
+    if (res?.error) {
+      setTtsModelStatus('error')
+      setTtsModelError(res.error)
+    } else {
+      setTtsModelStatus('ready')
+      setTtsModelPercent(100)
+    }
+  }
 
   if (!settings) return null
 
@@ -218,6 +278,71 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
               title="自定义颜色"
             />
           </div>
+
+          {/* TTS 朗读设置 */}
+          <div className="settings-section-title">TTS 朗读</div>
+          <div className="settings-row">
+            <label>启用朗读</label>
+            <label className="settings-toggle">
+              <input
+                type="checkbox"
+                checked={settings.tts?.enabled ?? true}
+                onChange={(e) => updateTts('enabled', e.target.checked)}
+              />
+              <span className="settings-slider" />
+            </label>
+          </div>
+          <div className="settings-row">
+            <label>语速</label>
+            <div className="settings-tts-speed">
+              <input
+                type="range"
+                min="0.5"
+                max="2"
+                step="0.1"
+                value={settings.tts?.speed ?? 0.9}
+                onChange={(e) => updateTts('speed', parseFloat(e.target.value))}
+              />
+              <span className="settings-tts-speed-val">{(settings.tts?.speed ?? 0.9).toFixed(1)}x</span>
+            </div>
+          </div>
+          <div className="settings-row">
+            <label>TTS 模型</label>
+            <select
+              value={settings.tts?.model ?? 'edge'}
+              onChange={(e) => updateTts('model', e.target.value)}
+            >
+              <option value="edge">Edge 内置</option>
+              {ttsModels.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </div>
+          {settings.tts?.model && settings.tts.model !== 'edge' && (
+            <div className="settings-tts-model">
+              {ttsModelStatus === 'ready' && (
+                <span className="settings-update-feedback success">模型已就绪</span>
+              )}
+              {ttsModelStatus === 'downloading' && (
+                <div className="settings-tts-download">
+                  <span className="settings-update-feedback">正在下载模型 {ttsModelPercent}%</span>
+                  <div className="settings-tts-progress">
+                    <div className="settings-tts-progress-bar" style={{ width: `${ttsModelPercent}%` }} />
+                  </div>
+                </div>
+              )}
+              {ttsModelStatus === 'error' && (
+                <span className="settings-update-feedback error">
+                  下载失败: {ttsModelError || '网络不可用'}
+                </span>
+              )}
+              {ttsModelStatus === 'unknown' && (
+                <button className="settings-update-btn" onClick={handleDownloadModel}>
+                  下载模型
+                </button>
+              )}
+            </div>
+          )}
 
           {/* 更新检测 */}
           <div className="settings-section-title">版本更新</div>

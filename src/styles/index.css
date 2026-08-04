@@ -2180,6 +2180,53 @@ button {
 .settings-update-feedback.found { color: var(--color-primary) }
 .settings-update-feedback.error { color: var(--color-danger) }
 
+/* ===== TTS 设置 ===== */
+.settings-tts-speed {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.settings-tts-speed input[type="range"] {
+  flex: 1;
+  accent-color: var(--color-primary);
+}
+
+.settings-tts-speed-val {
+  font-size: 13px;
+  color: var(--color-text);
+  min-width: 32px;
+  text-align: right;
+}
+
+.settings-tts-model {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-tts-download {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-tts-progress {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--color-border);
+  overflow: hidden;
+}
+
+.settings-tts-progress-bar {
+  height: 100%;
+  border-radius: 3px;
+  background: var(--color-primary);
+  transition: width .2s;
+}
+
 .btn-ghost:hover {
   border-color: var(--color-primary);
   color: var(--color-primary);
