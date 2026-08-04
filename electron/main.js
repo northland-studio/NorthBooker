@@ -15,7 +15,7 @@ let httpServer
 // 标题栏 HTML + CSS，注入到每个 index.html 中
 const TITLEBAR = `
 <style>
-body{padding-top:38px!important;margin:0!important}
+body{padding-top:38px!important;margin:0!important}::-webkit-scrollbar{display:none!important}html{scrollbar-width:none;-ms-overflow-style:none}
 #nb-titlebar{position:fixed!important;top:0!important;left:0!important;right:0!important;height:38px!important;background:#1a1b1d!important;color:#fff!important;z-index:99999!important;display:flex!important;align-items:center!important;justify-content:space-between!important;-webkit-app-region:drag;user-select:none}
 .nb-drag{display:flex!important;align-items:center;gap:8px;padding:0 12px;height:100%;flex:1}
 .nb-title{font-size:12px;opacity:.9}
