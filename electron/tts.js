@@ -208,13 +208,26 @@ function synthInWorker(worker, text, speed) {
   })
 }
 
+// 判断文本是否含足够中文（AIShell3 为纯中文模型，英文/数字会被忽略）
+function hasChinese(text) {
+  const zh = (text.match(/[\u4e00-\u9fff]/g) || []).length
+  return zh >= 10 || zh / Math.max(text.length, 1) >= 0.2
+}
+
 // 开始流式朗读：切分段落 → 并行预合成 → 按序推送 chunk
 async function startStream(text, modelId, speed, handlers) {
   stopStream()
-  const segments = splitText(text)
+  const rawSegments = splitText(text)
+  // 过滤掉几乎不含中文的段落（纯中文模型无法朗读英文）
+  const segments = rawSegments.filter(hasChinese)
+  const skipped = rawSegments.length - segments.length
   if (!segments.length) {
     handlers.onState?.({ type: 'done', total: 0 })
-    return { count: 0 }
+    return {
+      count: 0,
+      skipped,
+      error: '内容主要为英文/数字，当前中文模型无法朗读，请切换 Edge 内置模型',
+    }
   }
   let config
   try {
@@ -274,7 +287,7 @@ async function startStream(text, modelId, speed, handlers) {
   }
 
   for (let i = 0; i < Math.min(workerCount, segments.length); i++) launch()
-  return { count: segments.length }
+  return { count: segments.length, skipped }
 }
 
 function cleanupStream(state) {

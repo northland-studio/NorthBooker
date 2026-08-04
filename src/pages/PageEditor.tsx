@@ -393,11 +393,17 @@ export default function PageEditor() {
       synthDoneRef.current = false
       setTtsStatus('synthesizing')
       setTtsProgress(0)
-      await electronAPI.ttsStart({
+      const res = await electronAPI.ttsStart({
         text,
         model: ttsCfg.model,
         speed: Number(ttsCfg.speed) || 1.0,
       })
+      // 内容不含中文（中文模型无法朗读英文）时提示切换模型
+      if (res?.error) {
+        setTtsStatus('idle')
+        setTtsProgress(0)
+        alert(res.error)
+      }
       return
     }
     // Web Speech API（Edge 内置）
