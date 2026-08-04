@@ -94,26 +94,35 @@ jobs:
               })
             }
             (async () => {
-              // 从 latest.yml 解析文件名（匹配 electron-updater 预期的格式）
               const distDir = path.join(__dirname, 'dist')
+              // 列出 dist 中实际存在的文件
+              const distFiles = fs.readdirSync(distDir)
+              const exeFile = distFiles.find(f => f.endsWith('.exe'))
+              const blockmapFile = distFiles.find(f => f.endsWith('.exe.blockmap'))
               const ymlContent = fs.readFileSync(path.join(distDir, 'latest.yml'), 'utf-8')
-              const fileNames = []
+
+              // 从 latest.yml 解析文件名
               const re = /^\s*- url:\s*(.+)$/gm
+              const ymlFiles = []
               let m
               while ((m = re.exec(ymlContent)) !== null) {
-                fileNames.push(m[1].trim())
+                ymlFiles.push(m[1].trim())
               }
-              console.log('latest.yml 包含文件:', fileNames)
+              console.log('latest.yml 引用文件:', ymlFiles)
+
               // 上传 latest.yml
               await upload(path.join(distDir, 'latest.yml'), 'releases/latest.yml')
-              // 上传所有 YAML 中引用的文件（用 YAML 中的文件名作为 key）
-              for (const name of fileNames) {
-                const localPath = path.join(distDir, name)
-                if (!fs.existsSync(localPath)) {
-                  console.error('文件不存在:', localPath)
-                  continue
+
+              // 按 YAML 文件名上传（用实际磁盘文件的扩展名匹配）
+              for (const ymlName of ymlFiles) {
+                const ext = path.extname(ymlName)
+                const actualFile = distFiles.find(f => path.extname(f) === ext && (f.endsWith('.exe') || f.endsWith('.blockmap')))
+                if (actualFile) {
+                  console.log('上传:', actualFile, '→ releases/' + ymlName)
+                  await upload(path.join(distDir, actualFile), 'releases/' + ymlName)
+                } else {
+                  console.error('找不到匹配文件:', ymlName, 'dist内容:', distFiles)
                 }
-                await upload(localPath, 'releases/' + name)
               }
               console.log('CDN 源部署完成')
             })()
