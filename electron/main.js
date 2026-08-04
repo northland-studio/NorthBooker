@@ -138,9 +138,10 @@ function startServer() {
 
   const srv = http.createServer((req, res) => {
     const urlPath = req.url.split('?')[0]
+    const fullPath = req.url // 保留 query 参数，用于代理转发
     const localPath = path.join(distDir, urlPath === '/' ? 'index.html' : urlPath)
 
-    console.log('[北牖-Proxy]', req.method, urlPath)
+    console.log('[北牖-Proxy]', req.method, fullPath)
 
     // 1. 本地文件
     if (fs.existsSync(localPath) && !fs.statSync(localPath).isDirectory()) {
@@ -149,9 +150,9 @@ function startServer() {
       return
     }
 
-    // 2. 代理到生产服务器
-    console.log('[北牖-Proxy]  proxy to:', SITE_URL + urlPath)
-    proxyToProduction(req, res, urlPath)
+    // 2. 代理到生产服务器（保留完整 query string）
+    console.log('[北牖-Proxy]  proxy to:', SITE_URL + fullPath)
+    proxyToProduction(req, res, fullPath)
   })
 
   return new Promise((resolve) => {
