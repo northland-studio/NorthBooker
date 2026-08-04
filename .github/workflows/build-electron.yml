@@ -34,9 +34,47 @@ jobs:
           if (Test-Path electron/renderer-dist) { Remove-Item -Recurse -Force electron/renderer-dist }
           Copy-Item -Recurse dist electron/renderer-dist
 
+      - name: Check package.json & lock integrity
+        run: |
+          node -e "
+            const fs = require('fs')
+            const path = require('path')
+            // 检查所有 package.json 的 name/version
+            const files = []
+            function walk(dir) {
+              for (const f of fs.readdirSync(dir)) {
+                if (f === 'node_modules' || f === 'dist' || f === '.git') continue
+                const p = path.join(dir, f)
+                if (fs.statSync(p).isDirectory()) walk(p)
+                else if (f === 'package.json') files.push(p)
+              }
+            }
+            walk(process.cwd())
+            let err = 0
+            for (const p of files) {
+              try {
+                const j = JSON.parse(fs.readFileSync(p, 'utf8'))
+                if (!j.name || !j.version) { console.error('PKG missing name/version:', p); err = 1 }
+              } catch (e) { console.error('PKG parse fail:', p, e.message); err = 1 }
+            }
+            // 检查 package-lock 中 version 缺失/为空的条目
+            for (const lockFile of ['package-lock.json', 'electron/package-lock.json']) {
+              if (!fs.existsSync(lockFile)) continue
+              const l = JSON.parse(fs.readFileSync(lockFile, 'utf8'))
+              for (const [k, v] of Object.entries(l.packages || {})) {
+                if (!v || typeof v !== 'object') continue
+                if ('version' in v && (v.version == null || v.version === '')) {
+                  console.error('LOCK invalid version:', lockFile, k); err = 1
+                }
+              }
+            }
+            if (err) process.exit(1)
+            console.log('package.json & lock integrity OK')
+          "
+
       - name: Install Electron dependencies
         working-directory: electron
-        run: npm install
+        run: npm ci
 
       - name: Download Node runtime for TTS (node.exe)
         working-directory: electron
