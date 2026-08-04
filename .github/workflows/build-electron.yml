@@ -50,3 +50,38 @@ jobs:
           files: electron/dist/*.exe
           draft: false
           prerelease: false
+
+      - name: Upload to Qiniu CDN (备用更新源)
+        working-directory: electron
+        env:
+          QINIU_ACCESS_KEY: ${{ secrets.QINIU_ACCESS_KEY }}
+          QINIU_SECRET_KEY: ${{ secrets.QINIU_SECRET_KEY }}
+        run: |
+          npm install qiniu
+          $exe = Get-ChildItem dist -Filter *.exe | Select-Object -First 1
+          $yml = Get-ChildItem dist -Filter latest.yml | Select-Object -First 1
+          node -e "
+            const qiniu = require('qiniu')
+            const fs = require('fs')
+            const path = require('path')
+            const mac = new qiniu.auth.digest.Mac(process.env.QINIU_ACCESS_KEY, process.env.QINIU_SECRET_KEY)
+            const config = new qiniu.conf.Config()
+            config.zone = qiniu.zone.Zone_as0
+            const formUploader = new qiniu.form_up.FormUploader(config)
+            const bucket = 'northbooker'
+            function upload(localPath, key) {
+              return new Promise((resolve, reject) => {
+                const token = new qiniu.rs.PutPolicy({ scope: bucket + ':' + key }).uploadToken(mac)
+                formUploader.putFile(token, key, localPath, null, (err, ret, info) => {
+                  if (err) return reject(err)
+                  if (info.statusCode === 200) { console.log('上传成功:', key); resolve(ret) }
+                  else reject(new Error(info.statusCode + ' ' + JSON.stringify(ret)))
+                })
+              })
+            }
+            (async () => {
+              await upload('$($exe.FullName)', 'releases/' + '$($exe.Name)')
+              await upload('$($yml.FullName)', 'releases/latest.yml')
+              console.log('CDN 源部署完成')
+            })()
+          "

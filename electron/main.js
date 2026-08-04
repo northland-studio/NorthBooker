@@ -210,17 +210,52 @@ ipcMain.handle('open-external', (_, url) => shell.openExternal(url))
 ipcMain.handle('get-platform', () => process.platform)
 ipcMain.handle('get-site-url', () => SITE_URL)
 
-// 自动更新
+// 自动更新（双源：GitHub 主源 + CDN 备用源）
 function setupAutoUpdater() {
-  autoUpdater.autoDownload = false
+  const CDN_URL = 'https://cdn.northbooker.xuanjian.top/releases/'
+
+  autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
-  autoUpdater.on('update-available', (info) => mainWindow?.webContents.send('update-available', info))
+
+  // 更新事件
+  autoUpdater.on('update-available', (info) => {
+    mainWindow?.webContents.send('update-available', info)
+    console.log('[更新] 发现新版本:', info.version)
+  })
   autoUpdater.on('update-not-available', () => mainWindow?.webContents.send('update-not-available'))
   autoUpdater.on('download-progress', (p) => mainWindow?.webContents.send('update-progress', p.percent))
   autoUpdater.on('update-downloaded', () => mainWindow?.webContents.send('update-downloaded'))
-  autoUpdater.on('error', (err) => mainWindow?.webContents.send('update-error', err.message))
+  autoUpdater.on('error', (err) => {
+    console.error('[更新] GitHub 检查失败:', err.message)
+    mainWindow?.webContents.send('update-error', err.message)
+  })
 }
-ipcMain.handle('check-update', async () => { try { const r = await autoUpdater.checkForUpdates(); return { updateAvailable: !!r?.updateInfo } } catch(e) { return { error: e.message } } })
+
+// 双源检查更新：先 GitHub，失败则 CDN
+async function checkUpdatesDualSource() {
+  console.log('[更新] 检查 GitHub Release...')
+  const ghResult = await autoUpdater.checkForUpdates().catch((e) => {
+    console.log('[更新] GitHub 不可用:', e.message)
+    return null
+  })
+  if (ghResult?.updateInfo) return
+
+  // GitHub 失败 → CDN
+  console.log('[更新] 回退到 CDN 源')
+  const { NsisUpdater } = require('electron-updater')
+  const cdnUpdater = new NsisUpdater({
+    provider: 'generic',
+    url: CDN_URL,
+  })
+  cdnUpdater.autoDownload = true
+  cdnUpdater.autoInstallOnAppQuit = true
+  cdnUpdater.on('update-available', (info) => mainWindow?.webContents.send('update-available', info))
+  cdnUpdater.on('update-downloaded', () => mainWindow?.webContents.send('update-downloaded'))
+  cdnUpdater.on('error', (err) => console.error('[更新] CDN 源也失败:', err.message))
+  cdnUpdater.checkForUpdates().catch(() => {})
+}
+
+ipcMain.handle('check-update', checkUpdatesDualSource)
 ipcMain.handle('download-update', () => autoUpdater.downloadUpdate())
 ipcMain.handle('install-update', () => autoUpdater.quitAndInstall())
 
@@ -229,7 +264,7 @@ Menu.setApplicationMenu(null)
 app.whenReady().then(async () => {
   const port = await startServer()
   createWindow(port)
-  setTimeout(() => autoUpdater.checkForUpdatesAndNotify().catch(() => {}), 5000)
+  setTimeout(() => checkUpdatesDualSource(), 5000)
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(port) })
 })
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
