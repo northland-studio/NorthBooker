@@ -17,12 +17,23 @@ function toDoc(row) {
     size: row.size,
     updatedAt: row.updated_at,
     thumbnail: signPrivateUri(row.thumbnail),
+    folder_id: row.folder_id ?? null,
   }
 }
 
-// 获取文档列表
+// 获取文档列表（支持 folder_id 过滤）
 router.get('/', (req, res) => {
-  const rows = db.prepare('SELECT * FROM documents ORDER BY updated_at DESC').all()
+  const folderId = req.query.folder_id !== undefined ? (req.query.folder_id || null) : undefined
+  let rows
+  if (folderId !== undefined) {
+    if (folderId) {
+      rows = db.prepare('SELECT * FROM documents WHERE folder_id = ? ORDER BY updated_at DESC').all(folderId)
+    } else {
+      rows = db.prepare('SELECT * FROM documents WHERE folder_id IS NULL ORDER BY updated_at DESC').all()
+    }
+  } else {
+    rows = db.prepare('SELECT * FROM documents ORDER BY updated_at DESC').all()
+  }
   res.json(rows.map(toDoc))
 })
 

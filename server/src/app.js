@@ -8,6 +8,7 @@ import uploadsRouter from './routes/uploads.js'
 import bookmarksRouter from './routes/bookmarks.js'
 import commentsRouter from './routes/comments.js'
 import pagesRouter from './routes/pages.js'
+import foldersRouter from './routes/folders.js'
 
 const app = express()
 
@@ -27,6 +28,7 @@ app.use('/api/uploads', uploadsRouter)
 app.use('/api/bookmarks', bookmarksRouter)
 app.use('/api/comments', commentsRouter)
 app.use('/api/pages', pagesRouter)
+app.use('/api/folders', foldersRouter)
 
 // 健康检查
 app.get('/api/health', (req, res) => {

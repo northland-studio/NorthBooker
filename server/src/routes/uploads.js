@@ -63,7 +63,7 @@ router.get('/token', (req, res) => {
  * body: { key, fileName, title?, size, hash }
  */
 router.post('/callback', (req, res) => {
-  const { key, fileName, title, size, hash } = req.body
+  const { key, fileName, title, size, hash, folder_id } = req.body
   if (typeof key !== 'string' || !key) {
     return res.status(400).json({ error: '缺少 key' })
   }
@@ -81,9 +81,9 @@ router.post('/callback', (req, res) => {
   const signedUri = getPrivateDownloadUrl(key)
 
   db.prepare(
-    `INSERT INTO documents (id, title, file_name, uri, type, size, updated_at, owner_id, visibility)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'public')`,
-  ).run(id, docTitle, fileName, uri, type, docSize, updatedAt, req.user.id)
+    `INSERT INTO documents (id, title, file_name, uri, type, size, updated_at, owner_id, folder_id, visibility)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'public')`,
+  ).run(id, docTitle, fileName, uri, type, docSize, updatedAt, req.user.id, folder_id || null)
 
   res.json({
     id,

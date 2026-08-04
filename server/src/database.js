@@ -67,12 +67,29 @@ db.exec(`
     FOREIGN KEY (parent_id) REFERENCES pages(id) ON DELETE SET NULL,
     FOREIGN KEY (author_id) REFERENCES users(id)
   );
+
+  CREATE TABLE IF NOT EXISTS folders (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    parent_id TEXT,
+    owner_id INTEGER,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (parent_id) REFERENCES folders(id) ON DELETE CASCADE
+  );
 `)
 
 // 迁移：为已有的 pages 表补充 visibility 列（v0.2.0+）
 try {
   db.exec('ALTER TABLE pages ADD COLUMN visibility TEXT NOT NULL DEFAULT \'private\'')
   console.log('[北牖] 已迁移 pages.visibility 列')
+} catch {
+  // 列已存在则跳过
+}
+
+// 迁移：为已有的 documents 表添加 folder_id 列（v0.3.0+）
+try {
+  db.exec('ALTER TABLE documents ADD COLUMN folder_id TEXT REFERENCES folders(id)')
+  console.log('[北牖] 已迁移 documents.folder_id 列')
 } catch {
   // 列已存在则跳过
 }
