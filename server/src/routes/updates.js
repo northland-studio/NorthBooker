@@ -34,7 +34,7 @@ function signUrl(key, ttlSeconds = 300) {
 // HTTPS 获取远程文件内容
 function httpGet(url) {
   return new Promise((resolve, reject) => {
-    https.get(url, (res) => {
+    https.get(url, { headers: { 'Cache-Control': 'no-cache' } }, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         return httpGet(res.headers.location).then(resolve).catch(reject)
       }
@@ -54,7 +54,8 @@ function httpGet(url) {
 router.get('/latest.yml', async (_req, res) => {
   try {
     const signedUrl = signUrl('releases/latest.yml', 60)
-    const { status, body } = await httpGet(signedUrl)
+    // 追加时间戳绕过 CDN 缓存（token 之后额外参数不影响签名校验）
+    const { status, body } = await httpGet(signedUrl + '&_t=' + Date.now())
 
     if (status !== 200) {
       logger.error('updates', 'latest.yml 读取失败', { status })
@@ -72,7 +73,7 @@ router.get('/latest.yml', async (_req, res) => {
     )
 
     res.set('Content-Type', 'text/yaml; charset=utf-8')
-    res.set('Cache-Control', 'public, max-age=60')
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate')
     res.send(rewritten)
   } catch (err) {
     logger.error('updates', 'latest.yml 代理异常', { error: err.message })

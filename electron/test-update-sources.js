@@ -18,11 +18,16 @@ const GITHUB_API = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}`
 const CDN_BASE = 'https://northbooker.xuanjian.top/api/updates'
 
 // ===== 工具函数 =====
-function httpsGet(url) {
+function httpsGet(url, opts = {}) {
   return new Promise((resolve, reject) => {
     const req = https.get(url, { headers: { 'User-Agent': 'NorthBooker-Updater-Test/1.0' } }, (res) => {
+      if (opts.noRedirect) {
+        // 不跟随重定向，直接返回状态码和 headers
+        resolve({ status: res.statusCode, body: '', location: res.headers.location })
+        return
+      }
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-        return httpsGet(res.headers.location).then(resolve).catch(reject)
+        return httpsGet(res.headers.location, opts).then(resolve).catch(reject)
       }
       const chunks = []
       res.on('data', (c) => chunks.push(c))
@@ -151,20 +156,19 @@ async function testCDN() {
     console.log(`  latest.yml: 版本=${version}, 文件数=${files.length}`)
     result.version = version
 
-    // 2.3 检查文件列表中的第一个 .exe 是否可访问
+    // 2.3 检查文件 URL 是否可访问（HEAD 请求，不下载全文件）
     let exeChecked = false
     for (const f of files) {
-      if (f.endsWith('.exe') || f.endsWith('.exe.blockmap')) {
+      if (f.endsWith('.exe')) {
+        const fileUrl = f.startsWith('http') ? f : `https://northbooker.xuanjian.top${f.startsWith('/') ? '' : '/'}${f}`
         try {
-          const fileUrl = f.startsWith('http') ? f : `https://northbooker.xuanjian.top${f.startsWith('/') ? '' : '/'}${f}`
-          const fileResp = await httpsGet(fileUrl)
-          const status = fileResp.status
-          if (f.endsWith('.exe') && !exeChecked) {
-            console.log(`  ${f}: HTTP ${status} (${(fileResp.body.length / 1024 / 1024).toFixed(1)} MB)`)
-            exeChecked = true
-          }
-          result.details.push(`${f}: ${status}`)
-          if (status === 200) result.ok = true
+          const fileResp = await httpsGet(fileUrl, { noRedirect: true })
+          // 302/200 都算可用
+          const ok = fileResp.status === 200 || fileResp.status === 302 || fileResp.status === 301
+          console.log(`  ${f}: HTTP ${fileResp.status} ${ok ? '✓' : '✗'}`)
+          result.details.push(`${f}: ${fileResp.status}`)
+          if (ok) result.ok = true
+          exeChecked = true
         } catch (e) {
           console.log(`  ${f}: 不可达 - ${e.message}`)
           result.details.push(`${f}: 不可达`)
