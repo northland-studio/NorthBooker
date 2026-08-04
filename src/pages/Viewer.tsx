@@ -135,7 +135,15 @@ export default function Viewer() {
       </div>
       <div className="viewer-body">
         <div className="viewer-content">
-          <DocPreview documents={[previewDoc]} dark={theme === 'dark'} />
+          <DocPreview
+            documents={[previewDoc]}
+            dark={theme === 'dark'}
+            config={{
+              pdf: {
+                defaultZoom: Math.max(window.devicePixelRatio || 1, 2),
+              },
+            }}
+          />
         </div>
       </div>
 

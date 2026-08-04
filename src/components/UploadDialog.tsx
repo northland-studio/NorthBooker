@@ -7,9 +7,11 @@ import { getFileTypeLabel, formatSize } from '@/utils/fileType'
 export default function UploadDialog({
   onClose,
   onUploaded,
+  folderId,
 }: {
   onClose: () => void
   onUploaded: (doc: Document) => void
+  folderId?: string | null
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
@@ -46,7 +48,7 @@ export default function UploadDialog({
       const doc = await uploadDocument(file, title, (p) => {
         setProgress(p)
         if (p >= 100) setStage('recording')
-      })
+      }, folderId)
       onUploaded(doc)
       onClose()
     } catch (err: unknown) {
