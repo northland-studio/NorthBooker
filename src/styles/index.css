@@ -673,8 +673,7 @@ button {
 }
 
 .search-input {
-  flex: 1;
-  min-width: 200px;
+  max-width: 280px;
   padding: 10px 14px;
   border-radius: 10px;
   border: 1px solid var(--color-border);
@@ -683,6 +682,7 @@ button {
   font-size: 14px;
   outline: none;
   transition: border-color 0.2s;
+  flex: 0 1 auto;
 }
 
 .search-input:focus {
@@ -1629,6 +1629,65 @@ button {
 .path-item:last-child {
   color: var(--color-text);
   font-weight: 600;
+}
+
+/* 键盘导航聚焦 */
+.doc-list-row--focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+  background: rgba(0, 74, 173, 0.05);
+}
+
+.doc-card-focus {
+  outline: 2px solid var(--color-primary);
+  outline-offset: -2px;
+  border-radius: 12px;
+}
+
+/* 右键菜单 */
+.ctx-menu {
+  position: fixed;
+  z-index: 50;
+  min-width: 160px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  box-shadow: 0 6px 24px var(--color-shadow);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ctx-menu-item {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 13px;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.ctx-menu-item:hover {
+  background: rgba(0, 74, 173, 0.08);
+  color: var(--color-primary);
+}
+
+.ctx-menu-item--danger:hover {
+  background: rgba(220, 38, 38, 0.08);
+  color: var(--color-danger);
+}
+
+.ctx-menu-sep {
+  height: 1px;
+  background: var(--color-border);
+  margin: 4px 6px;
 }
 
 .btn-ghost {
@@ -2680,6 +2739,7 @@ button {
     order: 3;
   }
   .search-input {
+    max-width: none;
     flex: 1 1 100%;
   }
   .doc-grid {
