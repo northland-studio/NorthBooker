@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>北牖 NorthBooker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="titlebar">
+    <div class="titlebar-drag">
+      <img src="../icon.png" class="titlebar-logo" alt="">
+      <span class="titlebar-title">北牖 NorthBooker</span>
+    </div>
+    <div class="titlebar-controls">
+      <button id="btn-refresh" title="刷新" class="tb-btn">&#x21bb;</button>
+      <button id="btn-about" title="关于" class="tb-btn">&#9432;</button>
+      <button id="btn-min" title="最小化" class="tb-btn">&#x2014;</button>
+      <button id="btn-max" title="最大化" class="tb-btn">&#x25a1;</button>
+      <button id="btn-close" title="关闭" class="tb-btn tb-btn-close">&#x2715;</button>
+    </div>
+  </div>
+  <div id="content">
+    <div id="loading"><div class="spinner"></div><p>加载中...</p></div>
+    <div id="app-view">
+      <div class="app-sidebar">
+        <div class="sidebar-header">
+          <h2>北牖</h2>
+        </div>
+        <nav class="sidebar-nav">
+          <button class="nav-btn active" data-page="home">文件托管</button>
+          <button class="nav-btn" data-page="pages">在线文档</button>
+          <button class="nav-btn" data-page="download">应用下载</button>
+          <button class="nav-btn" data-page="terms">用户协议</button>
+        </nav>
+        <div class="sidebar-footer">
+          <button id="btn-login" class="btn-login-e">登录</button>
+        </div>
+      </div>
+      <div class="app-main">
+        <webview id="webview" src="https://northbooker.xuanjian.top" style="width:100%;height:100%;border:none"></webview>
+      </div>
+    </div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>
