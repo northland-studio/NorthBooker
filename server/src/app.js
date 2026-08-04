@@ -12,6 +12,7 @@ import pagesRouter from './routes/pages.js'
 import foldersRouter from './routes/folders.js'
 import logRouter from './routes/log.js'
 import updatesRouter from './routes/updates.js'
+import downloadRouter from './routes/download.js'
 
 const app = express()
 
@@ -48,6 +49,7 @@ app.use('/api/pages', pagesRouter)
 app.use('/api/folders', foldersRouter)
 app.use('/api/log', logRouter)
 app.use('/api/updates', updatesRouter)
+app.use('/api/download', downloadRouter)
 
 // 健康检查
 app.get('/api/health', (req, res) => {
