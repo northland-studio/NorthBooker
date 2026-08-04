@@ -157,12 +157,14 @@ function buildConfig(id) {
   }
 }
 
-// ===== 流式分段合成（主进程异步多实例 + 预合成） =====
-// 注意：不使用 worker_threads —— sherpa-onnx-node 原生模块在 Electron worker 中不稳定，
-// 主进程 createAsync/generateAsync 已验证不阻塞事件循环。
-const sherpa = require('sherpa-onnx-node')
+// ===== 流式分段合成（worker 线程池 + 同步推理 + 预合成） =====
+// 说明：sherpa-onnx-node 的异步 API（createAsync/generateAsync）在 Electron 环境 promise 不 resolve，
+// 因此用 worker_threads + 同步 API（new OfflineTts + generate）：同步阻塞只发生在 worker 线程，
+// 不影响主进程 UI 与事件循环。
+const { Worker } = require('worker_threads')
 
 let streamState = null
+let workerSeq = 0
 
 // 按句号/逗号/分号/换行切分文本为段落（每段约 20~200 字）
 function splitText(text) {
@@ -188,33 +190,34 @@ function hasChinese(text) {
   return zh >= 10 || zh / Math.max(text.length, 1) >= 0.2
 }
 
-// Float32 PCM → WAV Buffer
-function encodeWav(samples, sampleRate) {
-  const pcm = new Int16Array(samples.length)
-  for (let i = 0; i < samples.length; i++) {
-    const s = Math.max(-1, Math.min(1, samples[i]))
-    pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff
-  }
-  const dataSize = pcm.length * 2
-  const wav = Buffer.alloc(44 + dataSize)
-  wav.write('RIFF', 0)
-  wav.writeUInt32LE(36 + dataSize, 4)
-  wav.write('WAVE', 8)
-  wav.write('fmt ', 12)
-  wav.writeUInt32LE(16, 16)
-  wav.writeUInt16LE(1, 20)
-  wav.writeUInt16LE(1, 22)
-  wav.writeUInt32LE(sampleRate, 24)
-  wav.writeUInt32LE(sampleRate * 2, 28)
-  wav.writeUInt16LE(2, 32)
-  wav.writeUInt16LE(16, 34)
-  wav.write('data', 36)
-  wav.writeUInt32LE(dataSize, 40)
-  Buffer.from(pcm.buffer).copy(wav, 44)
-  return wav
+function createWorker(config) {
+  return new Promise((resolve, reject) => {
+    const w = new Worker(path.join(__dirname, 'tts-worker.js'), { workerData: { config } })
+    const timer = setTimeout(() => { w.terminate(); reject(new Error('模型加载超时')) }, 60000)
+    w.once('message', (m) => {
+      clearTimeout(timer)
+      if (m && m.ready) resolve(w)
+      else reject(new Error((m && m.error) || 'worker 初始化失败'))
+    })
+    w.once('error', (e) => { clearTimeout(timer); reject(e) })
+  })
 }
 
-// 开始流式朗读：切分段落 → 多实例并行预合成 → 按序推送 chunk
+function synthInWorker(worker, text, speed) {
+  return new Promise((resolve) => {
+    const id = ++workerSeq
+    const onMsg = (msg) => {
+      if (msg && msg.id === id) {
+        worker.off('message', onMsg)
+        resolve(msg)
+      }
+    }
+    worker.on('message', onMsg)
+    worker.postMessage({ id, text, speed })
+  })
+}
+
+// 开始流式朗读：切分段落 → worker 并行预合成 → 按序推送 chunk
 async function startStream(text, modelId, speed, handlers) {
   stopStream()
   const rawSegments = splitText(text)
@@ -240,31 +243,32 @@ async function startStream(text, modelId, speed, handlers) {
     handlers.onError?.({ error: e.message || String(e) })
     return { error: e.message || String(e) }
   }
-  // 实例池：最多 2 个实例并行（平衡速度与内存，同实例严格串行）
-  const instanceCount = Math.max(1, Math.min(2, active.length))
-  const instances = []
-  for (let i = 0; i < instanceCount; i++) {
+  const workerCount = Math.max(1, Math.min(4, active.length))
+  const workers = []
+  for (let i = 0; i < workerCount; i++) {
     try {
-      instances.push(await sherpa.OfflineTts.createAsync(config))
+      workers.push(await createWorker(config))
     } catch (e) {
+      for (const w of workers) w.terminate().catch(() => {})
       handlers.onError?.({ error: '模型加载失败: ' + (e.message || e) })
       return { error: e.message || String(e) }
     }
   }
   const state = {
     segments: active,
-    instances,
+    workers,
     speed: Number(speed) || 1.0,
     handlers,
     expectedIndex: 0,
     results: new Map(),
     stopped: false,
     total: active.length,
+    nextIndex: 0,
     t0: Date.now(),
   }
   streamState = state
   console.log(
-    `[TTS] 开始流式朗读: ${active.length} 段 | ${instanceCount} 实例 | 语速 ${state.speed}` +
+    `[TTS] 开始流式朗读: ${active.length} 段 | ${workerCount} 线程 | 语速 ${state.speed}` +
       (skipped ? ` | 跳过无中文段落 ${skipped} 段` : '') +
       (truncated ? ` | 截断 ${segments.length - MAX_SEGMENTS} 段` : ''),
   )
@@ -287,57 +291,39 @@ async function startStream(text, modelId, speed, handlers) {
     }
   }
 
-  // 单段合成（单实例，30 秒超时保护）
-  async function synthOne(inst, seg, spd) {
-    const genCfg = new sherpa.GenerationConfig({
-      sid: 0,
-      speed: Number(spd) || 1.0,
-      silenceScale: 0.2,
-    })
-    const audio = await inst.generateAsync({
-      text: seg,
-      generationConfig: genCfg,
-      onProgress: () => 1,
-    })
-    if (!audio || !audio.samples || !audio.samples.length) {
-      return { ok: false, error: '无音频输出' }
+  const launch = async () => {
+    if (state.stopped || state.nextIndex >= state.total) return
+    const index = state.nextIndex++
+    const worker = state.workers[index % state.workers.length]
+    const t0 = Date.now()
+    console.log(`[TTS] 段 ${index + 1}/${state.total} 开始合成`)
+    let msg
+    try {
+      msg = await Promise.race([
+        synthInWorker(worker, state.segments[index], state.speed),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('合成超时')), 30000)),
+      ])
+    } catch (e) {
+      msg = { ok: false, error: e.message || String(e) }
     }
-    const wav = encodeWav(audio.samples, audio.sampleRate)
-    return { ok: true, wav: wav.toString('base64') }
+    const cost = ((Date.now() - t0) / 1000).toFixed(1)
+    if (msg.ok) {
+      console.log(`[TTS] 段 ${index + 1}/${state.total} 完成 ${(msg.wav.length / 1024).toFixed(0)}KB (${cost}s)`)
+    } else {
+      console.error(`[TTS] 段 ${index + 1}/${state.total} 失败: ${msg.error}`)
+    }
+    state.results.set(index, msg)
+    pump()
+    launch()
   }
 
-  // 每个实例一条串行链，实例间并行；保证同实例不并发
-  const chains = instances.map(() => Promise.resolve())
-  for (let i = 0; i < active.length; i++) {
-    const instIdx = i % instanceCount
-    chains[instIdx] = chains[instIdx].then(async () => {
-      if (state.stopped) return
-      const t0 = Date.now()
-      console.log(`[TTS] 段 ${i + 1}/${state.total} 开始合成`)
-      let msg
-      try {
-        msg = await Promise.race([
-          synthOne(instances[instIdx], active[i], state.speed),
-          new Promise((_, rej) => setTimeout(() => rej(new Error('合成超时')), 30000)),
-        ])
-      } catch (e) {
-        msg = { ok: false, error: e.message || String(e) }
-      }
-      const cost = ((Date.now() - t0) / 1000).toFixed(1)
-      if (msg.ok) {
-        console.log(`[TTS] 段 ${i + 1}/${state.total} 完成 ${(msg.wav.length / 1024).toFixed(0)}KB (${cost}s)`)
-      } else {
-        console.error(`[TTS] 段 ${i + 1}/${state.total} 失败: ${msg.error}`)
-      }
-      state.results.set(i, msg)
-      pump()
-    })
-  }
+  for (let i = 0; i < Math.min(workerCount, active.length); i++) launch()
   return { count: active.length, skipped, truncated: truncated ? segments.length - MAX_SEGMENTS : 0 }
 }
 
 function cleanupStream(state) {
   if (streamState === state) streamState = null
+  for (const w of state.workers) w.terminate().catch(() => {})
 }
 
 function stopStream() {
@@ -347,6 +333,7 @@ function stopStream() {
     s.stopped = true
     console.log('[TTS] 朗读已停止')
     s.handlers.onState?.({ type: 'stopped' })
+    for (const w of s.workers) w.terminate().catch(() => {})
   }
 }
 
