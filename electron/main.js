@@ -252,33 +252,78 @@ function setupAutoUpdater() {
   autoUpdater.on('download-progress', (p) => mainWindow?.webContents.send('update-progress', p.percent))
   autoUpdater.on('update-downloaded', () => mainWindow?.webContents.send('update-downloaded'))
   autoUpdater.on('error', (err) => {
-    console.error('[更新] GitHub 检查失败:', err.message)
+    console.error('[更新] Github 源检查失败:', err.message)
     mainWindow?.webContents.send('update-error', err.message)
   })
 }
 
-// 双源检查更新：先 GitHub，失败则 CDN
-async function checkUpdatesDualSource() {
-  console.log('[更新] 检查 GitHub Release...')
-  const ghResult = await autoUpdater.checkForUpdates().catch((e) => {
-    console.log('[更新] GitHub 不可用:', e.message)
-    return null
+// HTTPS GET 工具
+function httpsGetJson(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, { headers: { 'User-Agent': 'NorthBooker-Updater/1.0', 'Accept': 'application/vnd.github+json' } }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        return httpsGetJson(res.headers.location).then(resolve).catch(reject)
+      }
+      const chunks = []
+      res.on('data', (c) => chunks.push(c))
+      res.on('end', () => {
+        if (res.statusCode === 200) {
+          try { resolve(JSON.parse(Buffer.concat(chunks).toString('utf-8'))) }
+          catch (e) { reject(e) }
+        } else {
+          reject(new Error('HTTP ' + res.statusCode))
+        }
+      })
+    }).on('error', reject).setTimeout(15000, () => reject(new Error('timeout')))
   })
-  if (ghResult?.updateInfo) return
+}
 
-  // GitHub 失败 → CDN
-  console.log('[更新] 回退到 CDN 源')
-  const { NsisUpdater } = require('electron-updater')
-  const cdnUpdater = new NsisUpdater({
-    provider: 'generic',
-    url: CDN_URL,
-  })
-  cdnUpdater.autoDownload = true
-  cdnUpdater.autoInstallOnAppQuit = true
-  cdnUpdater.on('update-available', (info) => mainWindow?.webContents.send('update-available', info))
-  cdnUpdater.on('update-downloaded', () => mainWindow?.webContents.send('update-downloaded'))
-  cdnUpdater.on('error', (err) => console.error('[更新] CDN 源也失败:', err.message))
-  cdnUpdater.checkForUpdates().catch(() => {})
+// 双源检查更新：直接 HTTPS 检测版本号，再触发下载
+async function checkUpdatesDualSource() {
+  const currentVer = app.getVersion()
+  console.log('[更新] 当前版本:', currentVer, '| 检查更新...')
+
+  // 源1: GitHub Release
+  try {
+    const release = await httpsGetJson('https://api.github.com/repos/northland-studio/NorthBooker/releases/latest')
+    const ghVer = (release.tag_name || '').replace(/^v/, '')
+    console.log('[更新] GitHub 最新:', ghVer)
+    if (ghVer && ghVer !== currentVer) {
+      // 有新版本，用 electron-updater 下载
+      const result = await autoUpdater.checkForUpdates().catch(() => null)
+      if (result?.updateInfo) return
+      // autoUpdater 检查失败但版本确实更新 → 直接用 CDN 源
+      console.log('[更新] GitHub provider 未检测到，改用 CDN 源下载')
+    } else {
+      console.log('[更新] GitHub 已是最新')
+      mainWindow?.webContents.send('update-not-available')
+      return
+    }
+  } catch (e) {
+    console.log('[更新] GitHub API 不可用:', e.message)
+  }
+
+  // 源2: CDN 后端代理
+  console.log('[更新] 使用 CDN 源...')
+  try {
+    const { NsisUpdater } = require('electron-updater')
+    const cdnUpdater = new NsisUpdater({ provider: 'generic', url: CDN_URL })
+    cdnUpdater.autoDownload = true
+    cdnUpdater.autoInstallOnAppQuit = true
+    cdnUpdater.on('update-available', (info) => {
+      mainWindow?.webContents.send('update-available', info)
+      console.log('[更新] CDN 发现新版本:', info.version)
+    })
+    cdnUpdater.on('update-downloaded', () => mainWindow?.webContents.send('update-downloaded'))
+    cdnUpdater.on('error', (err) => console.error('[更新] CDN 源失败:', err.message))
+    const cdnResult = await cdnUpdater.checkForUpdates().catch(() => null)
+    if (!cdnResult?.updateInfo) {
+      mainWindow?.webContents.send('update-not-available')
+    }
+  } catch (e) {
+    console.error('[更新] CDN 源异常:', e.message)
+    mainWindow?.webContents.send('update-not-available')
+  }
 }
 
 ipcMain.handle('check-update', checkUpdatesDualSource)
