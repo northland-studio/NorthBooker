@@ -1,17 +1,24 @@
 const { contextBridge, ipcRenderer } = require('electron')
 
-// 暴露 API 给渲染进程（标题栏通过 HTTP 服务器注入 HTML，不在此处操作 DOM）
 contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
   isElectron: true,
+
+  // 窗口控制
   minimize: () => ipcRenderer.invoke('window-minimize'),
   maximize: () => ipcRenderer.invoke('window-maximize'),
   close: () => ipcRenderer.invoke('window-close'),
   isMaximized: () => ipcRenderer.invoke('window-is-maximized'),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   getSiteUrl: () => ipcRenderer.invoke('get-site-url'),
+
   // OAuth
   oauthLogin: () => ipcRenderer.invoke('oauth-login'),
+
+  // 设置
+  getSettings: () => ipcRenderer.invoke('get-settings'),
+  setSetting: (key, value) => ipcRenderer.invoke('set-setting', key, value),
+
   // 更新
   checkUpdate: () => ipcRenderer.invoke('check-update'),
   downloadUpdate: () => ipcRenderer.invoke('download-update'),
@@ -19,5 +26,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateAvailable: (cb) => ipcRenderer.on('update-available', (_, i) => cb(i)),
   onUpdateProgress: (cb) => ipcRenderer.on('update-progress', (_, p) => cb(p)),
   onUpdateDownloaded: (cb) => ipcRenderer.on('update-downloaded', () => cb()),
+  onUpdateNotAvailable: (cb) => ipcRenderer.on('update-not-available', () => cb()),
   onUpdateError: (cb) => ipcRenderer.on('update-error', (_, m) => cb(m)),
+
+  // 获取更新公告
+  fetchReleaseNotes: () => {
+    return fetch('https://northbooker.xuanjian.top/api/updates/release-notes.json')
+      .then(r => r.ok ? r.json() : null)
+      .catch(() => null)
+  },
 })

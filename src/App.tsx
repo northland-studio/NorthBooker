@@ -11,6 +11,7 @@ import PageEditor from '@/pages/PageEditor'
 import PageTerms from '@/pages/PageTerms'
 import PageDownload from '@/pages/PageDownload'
 import { useAuthStore } from '@/store/auth'
+import UpdatePopup from '@/components/UpdatePopup'
 
 // 应用启动时，若有 token 但无缓存用户，自动拉取用户信息
 // （Electron 浏览器登录后 reload 的场景）
@@ -32,6 +33,7 @@ export default function App() {
   return (
     <>
       <AuthInit />
+      <UpdatePopup />
       <Routes>
         {/* OAuth 回调页：独立全屏，不走 Layout */}
         <Route path="/callback" element={<AuthCallback />} />

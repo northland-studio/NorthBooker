@@ -88,11 +88,36 @@ router.get('/latest.yml', async (_req, res) => {
 router.get('/files/:key', (req, res) => {
   try {
     const key = `releases/${decodeURIComponent(req.params.key)}`
-    const signedUrl = signUrl(key, 3600) // 1 小时有效期
+    const signedUrl = signUrl(key, 3600)
     res.redirect(302, signedUrl)
   } catch (err) {
     logger.error('updates', '文件签名失败', { error: err.message })
     res.status(500).send('sign error')
+  }
+})
+
+/**
+ * GET /api/updates/release-notes.json
+ * 返回最新版本的更新公告
+ */
+router.get('/release-notes.json', (_req, res) => {
+  try {
+    const signedUrl = signUrl('releases/release-notes.json', 60)
+    https.get(signedUrl, { headers: { 'Cache-Control': 'no-cache' } }, (qiniuRes) => {
+      const chunks = []
+      qiniuRes.on('data', (c) => chunks.push(c))
+      qiniuRes.on('end', () => {
+        if (qiniuRes.statusCode === 200) {
+          res.set('Content-Type', 'application/json; charset=utf-8')
+          res.set('Cache-Control', 'no-cache')
+          res.send(Buffer.concat(chunks))
+        } else {
+          res.status(404).json({ error: 'release notes not found' })
+        }
+      })
+    }).on('error', () => res.status(502).json({ error: 'unavailable' }))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
   }
 })
 

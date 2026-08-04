@@ -1718,6 +1718,58 @@ button {
   border-radius: 12px;
 }
 
+/* ===== 更新公告弹窗 ===== */
+.update-popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0,0,0,.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.update-popup {
+  background: var(--color-bg);
+  border-radius: 16px;
+  padding: 32px;
+  max-width: 420px;
+  width: 90%;
+  box-shadow: 0 12px 48px rgba(0,0,0,.3);
+  text-align: center;
+}
+.update-popup-icon {
+  color: var(--color-primary);
+  margin-bottom: 12px;
+}
+.update-popup h2 {
+  font-size: 18px;
+  margin: 0 0 4px;
+  color: var(--color-text);
+}
+.update-popup-date {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin: 0 0 16px;
+}
+.update-popup-changes {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px;
+  text-align: left;
+}
+.update-popup-changes li {
+  padding: 5px 0;
+  font-size: 13px;
+  color: var(--color-text);
+  border-bottom: 1px solid var(--color-border);
+}
+.update-popup-changes li:last-child { border-bottom: none }
+.update-popup-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
 .btn-ghost {
   padding: 8px 16px;
   border-radius: 10px;

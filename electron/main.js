@@ -1,5 +1,6 @@
-const { app, BrowserWindow, shell, ipcMain, Menu } = require('electron')
+const { app, BrowserWindow, shell, ipcMain, Menu, Tray, nativeImage } = require('electron')
 const { autoUpdater } = require('electron-updater')
+const Store = require('electron-store')
 const path = require('path')
 const http = require('http')
 const https = require('https')
@@ -11,8 +12,33 @@ const CDN_URL = 'https://northbooker.xuanjian.top/api/updates/'
 
 let mainWindow
 let httpServer
+let tray
 
-// 标题栏 HTML + CSS，注入到每个 index.html 中
+// 持久化存储
+const store = new Store({
+  defaults: {
+    windowBounds: { width: 1280, height: 800 },
+    isMaximized: false,
+    viewMode: 'grid',
+    autoLaunch: false,
+    minimizeToTray: true,
+    fonts: { ui: '', title: '', content: '' },
+  },
+})
+
+const iconPath = path.join(__dirname, 'icon.png')
+
+// ===== 字体 CSS 注入 =====
+function buildFontCSS() {
+  const fonts = store.get('fonts')
+  const rules = []
+  if (fonts.ui) rules.push(`body,button,input,select,textarea{font-family:"${fonts.ui}",system-ui,sans-serif!important}`)
+  if (fonts.title) rules.push(`h1,h2,h3,.doc-card-title,.doc-list-title{font-family:"${fonts.title}",system-ui,sans-serif!important}`)
+  if (fonts.content) rules.push(`p,.doc-card-body,.viewer-content{font-family:"${fonts.content}",system-ui,sans-serif!important}`)
+  return rules.length ? `<style id="nb-font-css">${rules.join('')}</style>` : ''
+}
+
+// 标题栏 HTML + CSS
 const TITLEBAR = `
 <style>
 body{padding-top:38px!important;margin:0!important}::-webkit-scrollbar{display:none!important}html{scrollbar-width:none;-ms-overflow-style:none}
@@ -37,9 +63,7 @@ body{padding-top:38px!important;margin:0!important}::-webkit-scrollbar{display:n
 (function(){
   var tb=document.getElementById('nb-titlebar');
   if(!tb)return;
-  // 将标题栏移到 body 最前面（因为注入在 </body> 前，此时它在底部）
   document.body.insertBefore(tb,document.body.firstChild);
-  // 监听 DOM 变化，防止标题栏被移除
   new MutationObserver(function(mutations){
     mutations.forEach(function(m){
       for(var i=0;i<m.removedNodes.length;i++){
@@ -50,7 +74,6 @@ body{padding-top:38px!important;margin:0!important}::-webkit-scrollbar{display:n
       }
     })
   }).observe(document.body,{childList:true});
-  // 确保 padding 常驻
   setInterval(function(){
     if(document.body.style.paddingTop!=='38px')document.body.style.paddingTop='38px';
   },1000);
@@ -86,12 +109,10 @@ function proxyToProduction(clientReq, clientRes, urlPath) {
     method: clientReq.method,
     headers: { ...clientReq.headers, host: parsed.hostname },
   }
-  // 移除 hop-by-hop 头
   delete opts.headers['accept-encoding']
 
   const proxyReq = https.request(opts, (proxyRes) => {
     console.log('[北牖-Proxy]  response:', proxyRes.statusCode, urlPath)
-    // 生产服务器返回 404 → 回退到 SPA index.html
     if (proxyRes.statusCode === 404) {
       serveLocalFile(clientRes, path.join(__dirname, 'renderer-dist', 'index.html'))
       return
@@ -107,7 +128,6 @@ function proxyToProduction(clientReq, clientRes, urlPath) {
     serveLocalFile(clientRes, path.join(__dirname, 'renderer-dist', 'index.html'))
   })
 
-  // 转发请求体（POST/PUT 等）
   if (clientReq.method !== 'GET' && clientReq.method !== 'HEAD') {
     clientReq.pipe(proxyReq)
   } else {
@@ -115,13 +135,14 @@ function proxyToProduction(clientReq, clientRes, urlPath) {
   }
 }
 
-// 提供本地文件（含标题栏注入）
+// 提供本地文件（含标题栏 + 字体注入）
 function serveLocalFile(res, filePath) {
   try {
     const ext = path.extname(filePath).toLowerCase()
     const contentType = MIME[ext] || 'application/octet-stream'
     let data = fs.readFileSync(filePath)
     if (ext === '.html') {
+      data = data.toString().replace('</head>', buildFontCSS() + '</head>')
       data = data.toString().replace('</body>', TITLEBAR + '</body>')
     }
     res.writeHead(200, { 'Content-Type': contentType })
@@ -138,19 +159,17 @@ function startServer() {
 
   const srv = http.createServer((req, res) => {
     const urlPath = req.url.split('?')[0]
-    const fullPath = req.url // 保留 query 参数，用于代理转发
+    const fullPath = req.url
     const localPath = path.join(distDir, urlPath === '/' ? 'index.html' : urlPath)
 
     console.log('[北牖-Proxy]', req.method, fullPath)
 
-    // 1. 本地文件
     if (fs.existsSync(localPath) && !fs.statSync(localPath).isDirectory()) {
       console.log('[北牖-Proxy]  serve local:', localPath)
       serveLocalFile(res, localPath)
       return
     }
 
-    // 2. 代理到生产服务器（保留完整 query string）
     console.log('[北牖-Proxy]  proxy to:', SITE_URL + fullPath)
     proxyToProduction(req, res, fullPath)
   })
@@ -162,15 +181,19 @@ function startServer() {
   })
 }
 
+// ===== 窗口创建（含尺寸/位置恢复） =====
 function createWindow(port) {
+  const bounds = store.get('windowBounds')
+  const isMaximized = store.get('isMaximized')
+
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 800,
+    width: bounds.width,
+    height: bounds.height,
     minWidth: 900,
     minHeight: 600,
     frame: false,
     title: '北牖 NorthBooker',
-    icon: path.join(__dirname, 'icon.png'),
+    icon: iconPath,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -178,27 +201,126 @@ function createWindow(port) {
     },
   })
 
-  // 开发模式：打开 DevTools
+  if (isMaximized) mainWindow.maximize()
+
+  // 保存窗口变化
+  mainWindow.on('resize', () => {
+    if (!mainWindow.isMaximized()) {
+      const [w, h] = mainWindow.getSize()
+      store.set('windowBounds', { width: w, height: h })
+    }
+    store.set('isMaximized', mainWindow.isMaximized())
+  })
+  mainWindow.on('maximize', () => store.set('isMaximized', true))
+  mainWindow.on('unmaximize', () => store.set('isMaximized', false))
+  mainWindow.on('move', () => {
+    if (!mainWindow.isMaximized()) {
+      const [x, y] = mainWindow.getPosition()
+      store.set('windowBounds', { ...store.get('windowBounds'), x, y })
+    }
+  })
+
+  // 关闭行为：最小化到托盘则隐藏
+  mainWindow.on('close', (e) => {
+    if (store.get('minimizeToTray') && tray) {
+      e.preventDefault()
+      mainWindow.hide()
+    }
+  })
+
+  mainWindow.on('closed', () => { mainWindow = null })
+
   const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev')
   if (isDev) {
     mainWindow.webContents.openDevTools({ mode: 'detach' })
   }
 
   mainWindow.loadURL(`http://127.0.0.1:${port}`)
-  mainWindow.on('closed', () => { mainWindow = null })
   setupAutoUpdater()
 }
 
-// 窗口控制
+// ===== 托盘 =====
+function createTray() {
+  const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
+  tray = new Tray(icon)
+  tray.setToolTip('北牖 NorthBooker')
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: '显示主窗口',
+      click: () => {
+        if (mainWindow) mainWindow.show()
+        else createWindow(app.port)
+      },
+    },
+    {
+      label: '检查更新',
+      click: () => checkUpdatesDualSource(),
+    },
+    { type: 'separator' },
+    {
+      label: '开机自启动',
+      type: 'checkbox',
+      checked: store.get('autoLaunch'),
+      click: (mi) => {
+        const enabled = mi.checked
+        app.setLoginItemSettings({ openAtLogin: enabled })
+        store.set('autoLaunch', enabled)
+      },
+    },
+    {
+      label: '退出',
+      click: () => {
+        store.set('minimizeToTray', false)
+        app.quit()
+      },
+    },
+  ])
+  tray.setContextMenu(contextMenu)
+  tray.on('double-click', () => {
+    if (mainWindow) { mainWindow.show(); mainWindow.focus() }
+    else createWindow(app.port)
+  })
+}
+
+// ===== 窗口控制 =====
 ipcMain.handle('window-minimize', () => mainWindow?.minimize())
 ipcMain.handle('window-maximize', () => {
   if (mainWindow?.isMaximized()) { mainWindow.unmaximize() } else { mainWindow?.maximize() }
   return mainWindow?.isMaximized()
 })
-ipcMain.handle('window-close', () => mainWindow?.close())
+ipcMain.handle('window-close', () => {
+  if (store.get('minimizeToTray') && tray) {
+    mainWindow?.hide()
+  } else {
+    mainWindow?.close()
+  }
+})
 ipcMain.handle('window-is-maximized', () => mainWindow?.isMaximized())
 
-// OAuth 登录：打开默认浏览器登录，本地回调服务器接收 token
+// ===== 设置 IPC =====
+ipcMain.handle('get-settings', () => store.store)
+ipcMain.handle('set-setting', (_, key, value) => {
+  store.set(key, value)
+  // 字体变更时刷新注入的 CSS
+  if (key === 'fonts' && mainWindow) {
+    mainWindow.webContents.executeJavaScript(`
+      var el=document.getElementById('nb-font-css');
+      if(el)el.remove();
+      var s=document.createElement('style');
+      s.id='nb-font-css';
+      s.textContent=${JSON.stringify(buildFontCSS().replace(/<\/?style[^>]*>/g, ''))};
+      document.head.appendChild(s);
+    `)
+  }
+  // 开机自启动
+  if (key === 'autoLaunch') {
+    app.setLoginItemSettings({ openAtLogin: value })
+  }
+  return store.get(key)
+})
+
+// ===== OAuth 登录 =====
 ipcMain.handle('oauth-login', async () => {
   return new Promise((resolve) => {
     const callbackServer = http.createServer((req, res) => {
@@ -225,7 +347,6 @@ ipcMain.handle('oauth-login', async () => {
       shell.openExternal(`${SITE_URL}/api/auth/login?redirect=http://127.0.0.1:${port}/auth/callback`)
     })
 
-    // 超时保护（5 分钟）
     setTimeout(() => {
       callbackServer.close()
       resolve(null)
@@ -238,26 +359,27 @@ ipcMain.handle('open-external', (_, url) => shell.openExternal(url))
 ipcMain.handle('get-platform', () => process.platform)
 ipcMain.handle('get-site-url', () => SITE_URL)
 
-// 自动更新（双源：GitHub 主源 + CDN 备用源）
+// ===== 自动更新 =====
 function setupAutoUpdater() {
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
 
-  // 更新事件
   autoUpdater.on('update-available', (info) => {
     mainWindow?.webContents.send('update-available', info)
     console.log('[更新] 发现新版本:', info.version)
   })
   autoUpdater.on('update-not-available', () => mainWindow?.webContents.send('update-not-available'))
   autoUpdater.on('download-progress', (p) => mainWindow?.webContents.send('update-progress', p.percent))
-  autoUpdater.on('update-downloaded', () => mainWindow?.webContents.send('update-downloaded'))
+  autoUpdater.on('update-downloaded', () => {
+    mainWindow?.webContents.send('update-downloaded')
+    console.log('[更新] 下载完成')
+  })
   autoUpdater.on('error', (err) => {
     console.error('[更新] Github 源检查失败:', err.message)
     mainWindow?.webContents.send('update-error', err.message)
   })
 }
 
-// HTTPS GET 工具
 function httpsGetJson(url) {
   return new Promise((resolve, reject) => {
     https.get(url, { headers: { 'User-Agent': 'NorthBooker-Updater/1.0', 'Accept': 'application/vnd.github+json' } }, (res) => {
@@ -278,21 +400,17 @@ function httpsGetJson(url) {
   })
 }
 
-// 双源检查更新：直接 HTTPS 检测版本号，再触发下载
 async function checkUpdatesDualSource() {
   const currentVer = app.getVersion()
   console.log('[更新] 当前版本:', currentVer, '| 检查更新...')
 
-  // 源1: GitHub Release
   try {
     const release = await httpsGetJson('https://api.github.com/repos/northland-studio/NorthBooker/releases/latest')
     const ghVer = (release.tag_name || '').replace(/^v/, '')
     console.log('[更新] GitHub 最新:', ghVer)
     if (ghVer && ghVer !== currentVer) {
-      // 有新版本，用 electron-updater 下载
       const result = await autoUpdater.checkForUpdates().catch(() => null)
       if (result?.updateInfo) return
-      // autoUpdater 检查失败但版本确实更新 → 直接用 CDN 源
       console.log('[更新] GitHub provider 未检测到，改用 CDN 源下载')
     } else {
       console.log('[更新] GitHub 已是最新')
@@ -303,7 +421,6 @@ async function checkUpdatesDualSource() {
     console.log('[更新] GitHub API 不可用:', e.message)
   }
 
-  // 源2: CDN 后端代理
   console.log('[更新] 使用 CDN 源...')
   try {
     const { NsisUpdater } = require('electron-updater')
@@ -330,12 +447,16 @@ ipcMain.handle('check-update', checkUpdatesDualSource)
 ipcMain.handle('download-update', () => autoUpdater.downloadUpdate())
 ipcMain.handle('install-update', () => autoUpdater.quitAndInstall())
 
+// ===== 应用生命周期 =====
 Menu.setApplicationMenu(null)
 
 app.whenReady().then(async () => {
   const port = await startServer()
+  app.port = port
+  createTray()
   createWindow(port)
   setTimeout(() => checkUpdatesDualSource(), 5000)
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(port) })
 })
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
+
+app.on('window-all-closed', () => { /* 托盘模式下不退出 */ })

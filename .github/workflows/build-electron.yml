@@ -113,6 +113,13 @@ jobs:
               // 上传 latest.yml
               await upload(path.join(distDir, 'latest.yml'), 'releases/latest.yml')
 
+              // 上传 release-notes.json
+              const notesPath = path.join(__dirname, 'release-notes.json')
+              if (fs.existsSync(notesPath)) {
+                await upload(notesPath, 'releases/release-notes.json')
+                console.log('release-notes.json 已上传')
+              }
+
               // 按 YAML 文件名上传（用实际磁盘文件的扩展名匹配）
               for (const ymlName of ymlFiles) {
                 const ext = path.extname(ymlName)
