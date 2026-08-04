@@ -3,6 +3,20 @@
 本文件记录北牖（NorthBooker）项目的版本演进与变更内容。
 发布单位：北域工作室（Northland Studio）
 
+## v2.3.1 (Electron) — 2026-08-04
+
+### 修复
+
+- **修复**：分享链接生成失败 — 前后端字段名统一（doc_id / expires_in_hours）
+- **修复**：托管文件私有设置无效 — 文档列表新增 private 过滤 + toDoc 返回 visibility
+- **修复**：在线文档订阅不工作 — API 参数改为 target_type/target_id
+- **修复**：数据库启动崩溃 — subscriptions.js import 语法修复
+
+### 优化
+
+- **样式**：统一三处分享入口为 ShareDialog 组件（Documents 右键 / Viewer / PageEditor）
+- **体验**：Markdown 模式下文档内搜索支持
+
 ## v2.3.0 (Electron) — 2026-08-04
 
 ### 新增

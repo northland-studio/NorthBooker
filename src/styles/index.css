@@ -1557,6 +1557,36 @@ button {
   font-size: 13px;
 }
 
+/* 分享弹窗 */
+.share-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: rgba(0,0,0,.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.share-dialog {
+  background: var(--color-bg);
+  border-radius: 16px;
+  width: 400px;
+  max-width: 92vw;
+  box-shadow: 0 12px 48px rgba(0,0,0,.25);
+}
+.share-dialog-body {
+  padding: 0 24px 24px;
+}
+.share-dialog-body .form-group {
+  margin-bottom: 14px;
+}
+.share-dialog-body .form-group label {
+  display: block;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-bottom: 6px;
+}
+
 /* 上传进度 */
 .upload-progress {
   position: relative;

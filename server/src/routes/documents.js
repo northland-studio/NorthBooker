@@ -1,6 +1,6 @@
 import { Router } from 'express'
 import db from '../database.js'
-import { authMiddleware, adminMiddleware } from '../middleware/auth.js'
+import { authMiddleware, adminMiddleware, optionalAuthMiddleware } from '../middleware/auth.js'
 import { signPrivateUri } from '../qiniu.js'
 import bus from '../bus.js'
 
@@ -19,21 +19,24 @@ function toDoc(row) {
     updatedAt: row.updated_at,
     thumbnail: signPrivateUri(row.thumbnail),
     folder_id: row.folder_id ?? null,
+    visibility: row.visibility || 'public',
+    owner_id: row.owner_id,
   }
 }
 
-// 获取文档列表（支持 folder_id 过滤）
-router.get('/', (req, res) => {
+// 获取文档列表（支持 folder_id 过滤，过滤私有文档）
+router.get('/', optionalAuthMiddleware, (req, res) => {
   const folderId = req.query.folder_id !== undefined ? (req.query.folder_id || null) : undefined
+  const isOwner = req.user ? `OR d.owner_id = ${req.user.id}` : ''
   let rows
   if (folderId !== undefined) {
     if (folderId) {
-      rows = db.prepare('SELECT * FROM documents WHERE folder_id = ? ORDER BY updated_at DESC').all(folderId)
+      rows = db.prepare(`SELECT d.* FROM documents d WHERE d.folder_id = ? AND (d.visibility != 'private' ${isOwner}) ORDER BY d.updated_at DESC`).all(folderId)
     } else {
-      rows = db.prepare('SELECT * FROM documents WHERE folder_id IS NULL ORDER BY updated_at DESC').all()
+      rows = db.prepare(`SELECT d.* FROM documents d WHERE d.folder_id IS NULL AND (d.visibility != 'private' ${isOwner}) ORDER BY d.updated_at DESC`).all()
     }
   } else {
-    rows = db.prepare('SELECT * FROM documents ORDER BY updated_at DESC').all()
+    rows = db.prepare(`SELECT d.* FROM documents d WHERE (d.visibility != 'private' ${isOwner}) ORDER BY d.updated_at DESC`).all()
   }
   res.json(rows.map(toDoc))
 })

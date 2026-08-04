@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { fetchDocumentsByFolder, moveDocument } from '@/api/documents'
 import { fetchBookmarks } from '@/api/bookmarks'
 import { fetchFolders, createFolder, deleteFolder } from '@/api/folders'
+import ShareDialog from '@/components/ShareDialog'
 import type { Folder } from '@/api/folders'
 import type { Document, FileType } from '@/types/document'
 import { resolveUri } from '@/utils/url'
@@ -96,6 +97,8 @@ export default function Documents() {
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [moveFolderOpen, setMoveFolderOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [shareDocId, setShareDocId] = useState('')
 
   const load = useCallback(() => {
     setLoading(true)
@@ -199,10 +202,8 @@ export default function Documents() {
   }
 
   const handleShareDoc = (doc: Document) => {
-    const url = `${window.location.origin}/viewer/${doc.id}`
-    navigator.clipboard.writeText(`【${doc.title}】${url}`).then(() => {
-      alert('分享链接已复制到剪贴板')
-    })
+    setShareDocId(doc.id)
+    setShareOpen(true)
   }
 
   // === 键盘导航 ===
@@ -757,6 +758,8 @@ export default function Documents() {
           )}
         </div>
       )}
+
+      {shareOpen && shareDocId && <ShareDialog docId={shareDocId} onClose={() => setShareOpen(false)} />}
     </div>
   )
 }

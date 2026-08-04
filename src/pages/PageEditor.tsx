@@ -20,6 +20,7 @@ import { useThemeStore } from '@/store/theme'
 import { formatDate } from '@/utils/fileType'
 import DocSearch from '@/components/DocSearch'
 import MarkdownSearch from '@/components/MarkdownSearch'
+import ShareDialog from '@/components/ShareDialog'
 import CommentPanel from '@/components/CommentPanel'
 
 interface TocItem {
@@ -58,6 +59,7 @@ export default function PageEditor() {
   const [showToc, setShowToc] = useState(false)
   const [copied, setCopied] = useState(false)
   const [showSearch, setShowSearch] = useState(false)
+  const [showShare, setShowShare] = useState(false)
   const [showComments, setShowComments] = useState(false)
   const [editorType, setEditorType] = useState<'richtext' | 'markdown'>('richtext')
   const [markdownContent, setMarkdownContent] = useState('')
@@ -422,6 +424,17 @@ export default function PageEditor() {
             </svg>
           </button>
           <button
+            className="pe-share-btn"
+            onClick={() => setShowShare(true)}
+            title="生成分享链接"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+          </button>
+          <button
             className={`pe-share-btn ${showSearch ? 'pe-btn--active' : ''}`}
             onClick={() => setShowSearch(!showSearch)}
             title="搜索"
@@ -668,6 +681,8 @@ export default function PageEditor() {
           </div>
         </div>
       </div>
+
+      {showShare && id && <ShareDialog docId={id} onClose={() => setShowShare(false)} />}
     </div>
   )
 }

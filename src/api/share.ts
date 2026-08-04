@@ -5,10 +5,9 @@ export interface ShareLinkResponse {
 }
 
 export async function createShareLink(params: {
-  docId?: string
-  pageId?: string
+  doc_id: string
   password?: string
-  expiration?: string
+  expires_in_hours?: number
 }): Promise<ShareLinkResponse> {
   const { data } = await client.post<ShareLinkResponse>('/share', params)
   return data
