@@ -61,11 +61,6 @@ jobs:
           QINIU_SECRET_KEY: ${{ secrets.QINIU_SECRET_KEY }}
         run: |
           npm install qiniu
-          $exe = Get-ChildItem dist -Filter *.exe | Select-Object -First 1
-          $yml = Get-ChildItem dist -Filter latest.yml | Select-Object -First 1
-          $env:EXE_PATH = $exe.FullName
-          $env:EXE_NAME = $exe.Name
-          $env:YML_PATH = $yml.FullName
           node -e "
             const qiniu = require('qiniu')
             const fs = require('fs')
@@ -73,6 +68,7 @@ jobs:
             const mac = new qiniu.auth.digest.Mac(process.env.QINIU_ACCESS_KEY, process.env.QINIU_SECRET_KEY)
             const config = new qiniu.conf.Config()
             config.zone = qiniu.zone.Zone_as0
+            config.useHttpsDomain = true
             const formUploader = new qiniu.form_up.FormUploader(config)
             const bucket = 'northbooker'
             function upload(localPath, key) {
@@ -86,8 +82,27 @@ jobs:
               })
             }
             (async () => {
-              await upload(process.env.EXE_PATH, 'releases/' + process.env.EXE_NAME)
-              await upload(process.env.YML_PATH, 'releases/latest.yml')
+              // 从 latest.yml 解析文件名（匹配 electron-updater 预期的格式）
+              const distDir = path.join(__dirname, 'dist')
+              const ymlContent = fs.readFileSync(path.join(distDir, 'latest.yml'), 'utf-8')
+              const fileNames = []
+              const re = /^\s*- url:\s*(.+)$/gm
+              let m
+              while ((m = re.exec(ymlContent)) !== null) {
+                fileNames.push(m[1].trim())
+              }
+              console.log('latest.yml 包含文件:', fileNames)
+              // 上传 latest.yml
+              await upload(path.join(distDir, 'latest.yml'), 'releases/latest.yml')
+              // 上传所有 YAML 中引用的文件（用 YAML 中的文件名作为 key）
+              for (const name of fileNames) {
+                const localPath = path.join(distDir, name)
+                if (!fs.existsSync(localPath)) {
+                  console.error('文件不存在:', localPath)
+                  continue
+                }
+                await upload(localPath, 'releases/' + name)
+              }
               console.log('CDN 源部署完成')
             })()
           "
