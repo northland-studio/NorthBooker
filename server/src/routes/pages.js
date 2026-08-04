@@ -152,8 +152,8 @@ router.put('/:id', authMiddleware, (req, res) => {
   // Save version snapshot before update
   const current = db.prepare('SELECT title, content, author_id FROM pages WHERE id = ?').get(req.params.id)
   if (current) {
-    db.prepare('INSERT INTO page_versions (page_id, title, content, author_id) VALUES (?, ?, ?, ?)')
-      .run(req.params.id, current.title, current.content, current.author_id)
+    db.prepare('INSERT INTO page_versions (page_id, title, content, author_id, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(req.params.id, current.title, current.content, current.author_id, new Date().toISOString())
   }
 
   const { title, content, parentId, visibility } = req.body
@@ -165,7 +165,7 @@ router.put('/:id', authMiddleware, (req, res) => {
      WHERE id = ?`,
   ).run(title ?? null, content ?? null, parentId ?? null, visibility ?? null, now, req.params.id)
   bus.emit('page:updated', { pageId: req.params.id })
-  res.json({ success: true })
+  res.json({ success: true, updated_at: now })
 })
 
 // 删除页面（需登录，仅作者或管理员）
