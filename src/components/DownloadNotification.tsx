@@ -4,6 +4,7 @@ type Phase = 'hidden' | 'available' | 'downloading' | 'completed'
 
 interface UpdateInfo {
   version: string
+  source?: 'github' | 'cdn'
 }
 
 // 右下角下载通知：发现新版本 → 下载进度 → 完成
@@ -18,15 +19,21 @@ export default function DownloadNotification({
   const [version, setVersion] = useState('')
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState('')
+  const [source, setSource] = useState<'github' | 'cdn'>('github')
 
   useEffect(() => {
     const api = (window as any).electronAPI
     if (!api?.isElectron) return
 
+    api.getUpdateSource().then((s: { source: string }) => {
+      if (s?.source) setSource(s.source as 'github' | 'cdn')
+    })
+
     const onAvailable = (info: UpdateInfo) => {
       setVersion(info.version)
       setPhase('available')
       setError('')
+      if (info.source) setSource(info.source)
     }
 
     const onProgress = (p: number) => {
@@ -42,11 +49,12 @@ export default function DownloadNotification({
 
     const onError = (msg: string) => {
       setError(msg)
-      setPhase('available') // 回到可重试状态
+      setPhase('available')
     }
 
     // GitHub 下载失败时自动切换到 CDN → 自动重试下载
     const onSourceSwitched = () => {
+      setSource('cdn')
       setError('')
       setPhase('downloading')
       setProgress(0)
@@ -59,9 +67,7 @@ export default function DownloadNotification({
     api.onUpdateError(onError)
     api.onSourceSwitched(onSourceSwitched)
 
-    return () => {
-      // electronAPI 事件无 removeListener，组件卸载不影响
-    }
+    return () => {}
   }, [])
 
   const api = (window as any).electronAPI
@@ -76,7 +82,15 @@ export default function DownloadNotification({
     setPhase('hidden')
   }
 
+  const handleSwitchSource = async () => {
+    setError('')
+    await api?.switchUpdateSource()
+    // 事件回调会更新 phase
+  }
+
   if (phase === 'hidden') return null
+
+  const sourceLabel = source === 'github' ? 'GitHub' : 'CDN'
 
   return (
     <div className={`download-notification ${phase}`}>
@@ -98,13 +112,24 @@ export default function DownloadNotification({
 
       {/* 内容 */}
       <div className="dn-body">
+        {/* 源标签 */}
+        <div className="dn-source-badge">
+          <span className={`dn-source-dot dn-source-dot--${source}`} />
+          源: {sourceLabel}
+        </div>
+
         {phase === 'available' && (
           <>
             <div className="dn-title">发现新版本 v{version}</div>
             {error && <div className="dn-error">{error}</div>}
-            <button className="dn-btn" onClick={handleDownload}>
-              下载更新
-            </button>
+            <div className="dn-available-actions">
+              <button className="dn-btn" onClick={handleDownload}>
+                下载更新
+              </button>
+              <button className="dn-btn dn-btn-secondary" onClick={handleSwitchSource}>
+                切换源
+              </button>
+            </div>
           </>
         )}
 

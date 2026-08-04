@@ -1,9 +1,10 @@
 {
-  "version": "2.2.1",
+  "version": "2.2.2",
   "date": "2026-08-04",
   "changes": [
-    "修复 GitHub 下载失败时自动回退 CDN 源",
-    "修复 electron-builder 包名统一（GitHub 与七牛对齐）",
-    "优化网页端下载页 CDN 七牛私有签名鉴权"
+    "更新通知显示当前使用的下载源（GitHub / CDN）",
+    "检测到更新后支持手动切换 GitHub ↔ CDN 源",
+    "重构更新模块：全局存储双 updater，提供 get/switch 源 IPC",
+    "修复 GitHub 下载失败时自动回退 CDN 源"
   ]
 }

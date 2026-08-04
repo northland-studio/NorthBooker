@@ -35,6 +35,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onUpdateNotAvailable: (cb) => ipcRenderer.on('update-not-available', () => cb()),
   onUpdateError: (cb) => ipcRenderer.on('update-error', (_, m) => cb(m)),
   onSourceSwitched: (cb) => ipcRenderer.on('update-source-switched', () => cb()),
+  getUpdateSource: () => ipcRenderer.invoke('get-update-source'),
+  switchUpdateSource: () => ipcRenderer.invoke('switch-update-source'),
 
   // 获取更新公告
   fetchReleaseNotes: () => {

@@ -1836,6 +1836,26 @@ button {
   color: var(--color-danger);
   margin-bottom: 8px;
 }
+.dn-source-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  margin-bottom: 8px;
+}
+.dn-source-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.dn-source-dot--github { background: #6e40c9 }
+.dn-source-dot--cdn { background: var(--color-success) }
+.dn-available-actions {
+  display: flex;
+  gap: 6px;
+}
 .dn-btn {
   padding: 6px 18px;
   border-radius: 8px;
