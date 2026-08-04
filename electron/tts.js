@@ -292,4 +292,4 @@ function stopStream() {
   }
 }
 
-module.exports = { TTS_MODELS, isModelReady, ensureModel, startStream, stopStream }
+module.exports = { TTS_MODELS, isModelReady, ensureModel, splitText, startStream, stopStream }
