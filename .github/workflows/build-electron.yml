@@ -47,7 +47,10 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.package.outputs.version }}
-          files: electron/dist/*.exe
+          files: |
+            electron/dist/*.exe
+            electron/dist/latest.yml
+            electron/dist/*.blockmap
           draft: false
           prerelease: false
 
