@@ -1,11 +1,9 @@
 {
-  "version": "2.2.0",
+  "version": "2.2.1",
   "date": "2026-08-04",
   "changes": [
-    "网页端下载页重构：动态获取最新版本号，每个平台提供 GitHub + CDN 双下载源",
-    "新增 iOS PWA 安装指南（桌面端隐藏）",
-    "新增网站 PWA 支持（manifest.json + iOS 主屏幕元标签）",
-    "预留 Android 版下载位置",
-    "桌面端导航栏隐藏「应用下载」入口"
+    "修复 GitHub 下载失败时自动回退 CDN 源",
+    "修复 electron-builder 包名统一（GitHub 与七牛对齐）",
+    "优化网页端下载页 CDN 七牛私有签名鉴权"
   ]
 }
