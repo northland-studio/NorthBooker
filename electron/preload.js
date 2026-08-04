@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   isMaximized: () => ipcRenderer.invoke('window-is-maximized'),
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
   getSiteUrl: () => ipcRenderer.invoke('get-site-url'),
+  getVersion: () => ipcRenderer.invoke('get-version'),
 
   // OAuth
   oauthLogin: () => ipcRenderer.invoke('oauth-login'),
@@ -18,6 +19,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 设置
   getSettings: () => ipcRenderer.invoke('get-settings'),
   setSetting: (key, value) => ipcRenderer.invoke('set-setting', key, value),
+
+  // 字体
+  getCloudFonts: () => ipcRenderer.invoke('get-cloud-fonts'),
+  loadCloudFont: (info) => ipcRenderer.invoke('load-cloud-font', info),
+  pickLocalFont: () => ipcRenderer.invoke('pick-local-font'),
 
   // 更新
   checkUpdate: () => ipcRenderer.invoke('check-update'),

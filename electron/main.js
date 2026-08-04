@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell, ipcMain, Menu, Tray, nativeImage } = require('electron')
+const { app, BrowserWindow, shell, ipcMain, Menu, Tray, nativeImage, dialog } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const Store = require('electron-store')
 const path = require('path')
@@ -36,6 +36,33 @@ function buildFontCSS() {
   if (fonts.title) rules.push(`h1,h2,h3,.doc-card-title,.doc-list-title{font-family:"${fonts.title}",system-ui,sans-serif!important}`)
   if (fonts.content) rules.push(`p,.doc-card-body,.viewer-content{font-family:"${fonts.content}",system-ui,sans-serif!important}`)
   return rules.length ? `<style id="nb-font-css">${rules.join('')}</style>` : ''
+}
+
+// 云字体预设列表
+const CLOUD_FONTS = [
+  { name: '系统默认', family: '' },
+  { name: '思源黑体', family: 'Noto Sans SC', url: 'https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap' },
+  { name: '思源宋体', family: 'Noto Serif SC', url: 'https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;500;700&display=swap' },
+  { name: '站酷快乐体', family: 'ZCOOL KuaiLe', url: 'https://fonts.googleapis.com/css2?family=ZCOOL+KuaiLe&display=swap' },
+  { name: '站酷文艺体', family: 'ZCOOL XiaoWei', url: 'https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&display=swap' },
+  { name: '马山手写体', family: 'Ma Shan Zheng', url: 'https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&display=swap' },
+  { name: '霞鹜文楷', family: 'LXGW WenKai', url: 'https://cdn.jsdelivr.net/npm/lxgw-wenkai-webfont@1.7.0/style.css' },
+]
+
+// 注入云字体 CSS 到渲染进程
+function injectFontCSS(css) {
+  if (!mainWindow) return
+  mainWindow.webContents.executeJavaScript(`
+    (function(){
+      var id='nb-cloud-font-css';
+      var el=document.getElementById(id);
+      if(el)el.remove();
+      var s=document.createElement('style');
+      s.id=id;
+      s.textContent=${JSON.stringify(css)};
+      document.head.appendChild(s);
+    })();
+  `)
 }
 
 // 标题栏 HTML + CSS
@@ -320,6 +347,67 @@ ipcMain.handle('set-setting', (_, key, value) => {
   return store.get(key)
 })
 
+// ===== 云字体预设 =====
+ipcMain.handle('get-cloud-fonts', () => CLOUD_FONTS)
+
+ipcMain.handle('load-cloud-font', async (_, { family, url }) => {
+  if (!url) { injectFontCSS(''); return }
+  try {
+    // 下载字体 CSS 并注入渲染进程
+    const css = await new Promise((resolve, reject) => {
+      const get = url.startsWith('https') ? https.get : http.get
+      get(url, (res) => {
+        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+          const get2 = res.headers.location.startsWith('https') ? https.get : http.get
+          get2(res.headers.location, (r2) => {
+            const chunks = []
+            r2.on('data', (c) => chunks.push(c))
+            r2.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')))
+          }).on('error', reject)
+          return
+        }
+        const chunks = []
+        res.on('data', (c) => chunks.push(c))
+        res.on('end', () => resolve(Buffer.concat(chunks).toString('utf-8')))
+      }).on('error', reject).setTimeout(10000, () => reject(new Error('timeout')))
+    })
+    injectFontCSS(css)
+    console.log('[字体] 云字体已加载:', family)
+  } catch (e) {
+    console.error('[字体] 云字体加载失败:', e.message)
+  }
+})
+
+// ===== 本地字体文件选择 =====
+ipcMain.handle('pick-local-font', async () => {
+  if (!mainWindow) return null
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: '选择字体文件',
+    filters: [
+      { name: '字体文件', extensions: ['ttf', 'otf', 'woff', 'woff2'] },
+    ],
+    properties: ['openFile'],
+  })
+  if (result.canceled || result.filePaths.length === 0) return null
+
+  const filePath = result.filePaths[0]
+  const ext = path.extname(filePath).toLowerCase()
+  const baseName = path.basename(filePath, ext)
+
+  try {
+    const data = fs.readFileSync(filePath)
+    const dataUrl = 'data:font/' + (ext === '.ttf' ? 'truetype' : ext === '.otf' ? 'opentype' : ext === '.woff' ? 'woff' : 'woff2') + ';base64,' + data.toString('base64')
+
+    injectFontCSS(`@font-face{font-family:"${baseName}";src:url(${dataUrl}) format("${ext === '.ttf' ? 'truetype' : ext === '.otf' ? 'opentype' : ext === '.woff' ? 'woff' : 'woff2'}");font-weight:normal;font-style:normal}`)
+
+    console.log('[字体] 本地字体已加载:', baseName)
+    return { family: baseName, path: filePath }
+  } catch (e) {
+    console.error('[字体] 本地字体加载失败:', e.message)
+    return null
+  }
+})
+
 // ===== OAuth 登录 =====
 ipcMain.handle('oauth-login', async () => {
   return new Promise((resolve) => {
@@ -358,6 +446,7 @@ ipcMain.handle('oauth-login', async () => {
 ipcMain.handle('open-external', (_, url) => shell.openExternal(url))
 ipcMain.handle('get-platform', () => process.platform)
 ipcMain.handle('get-site-url', () => SITE_URL)
+ipcMain.handle('get-version', () => app.getVersion())
 
 // ===== 自动更新 =====
 let activeUpdater = null // 当前活跃的 updater 实例（用于手动下载/安装）
