@@ -56,7 +56,16 @@ export default function Documents() {
   const [filter, setFilter] = useState<FilterType>('all')
   const [sort, setSort] = useState<'updated' | 'title'>('updated')
   const [showUpload, setShowUpload] = useState(false)
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
+    // Electron 桌面端从持久化设置读取默认视图模式
+    const electronAPI = (window as any).electronAPI
+    if (electronAPI?.isElectron) {
+      electronAPI.getSettings().then((s: any) => {
+        if (s?.viewMode) setViewMode(s.viewMode)
+      })
+    }
+    return 'grid'
+  })
 
   // 文件夹导航
   const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
