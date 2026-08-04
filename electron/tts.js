@@ -7,20 +7,20 @@ const https = require('https')
 const { execFileSync } = require('child_process')
 
 // 可用音色模型（edge 为系统内置，不在此列）
+// 主源 GitHub Releases，备源后端代理（七牛私有空间签名下载，国内速度快）
+// 注意：官方 release 里 vits-zh-hf-fanchen-C 等部分模型包缺少引擎必需的数据文件
+// （phontab/espeak-ng-data），无法直接加载，故只收录已验证可用的模型。
+const CDN_PROXY = 'https://northbooker.xuanjian.top/api/updates/files/'
 const TTS_MODELS = [
-  {
-    id: 'fanchen',
-    name: '饭辰（中文女声）',
-    url: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-vits-zh-hf-fanchen-C.tar.bz2',
-    archive: 'sherpa-onnx-vits-zh-hf-fanchen-C.tar.bz2',
-    dir: 'sherpa-onnx-vits-zh-hf-fanchen-C',
-  },
   {
     id: 'aishell3',
     name: 'AIShell3（中文多音色）',
-    url: 'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/sherpa-onnx-vits-zh-llamaindex-aishell3.tar.bz2',
-    archive: 'sherpa-onnx-vits-zh-llamaindex-aishell3.tar.bz2',
-    dir: 'sherpa-onnx-vits-zh-llamaindex-aishell3',
+    urls: [
+      'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-zh-aishell3.tar.bz2',
+      CDN_PROXY + 'vits-zh-aishell3.tar.bz2',
+    ],
+    archive: 'vits-zh-aishell3.tar.bz2',
+    dir: 'vits-zh-aishell3',
   },
 ]
 
@@ -39,21 +39,40 @@ function getModelDir(id) {
 
 function isModelReady(id) {
   const dir = getModelDir(id)
-  return !!dir && fs.existsSync(path.join(dir, 'model.onnx'))
+  if (!dir || !fs.existsSync(dir)) return false
+  try {
+    return fs.readdirSync(dir).some((f) => f.endsWith('.onnx'))
+  } catch {
+    return false
+  }
 }
 
-// 下载文件（跟随重定向，带进度回调）
+// 目录内查找 onnx 模型文件（优先主模型，排除 int8 量化版）
+function findOnnx(dir) {
+  const files = fs.readdirSync(dir)
+  return files.find((f) => f.endsWith('.onnx') && !f.includes('int8')) || files.find((f) => f.endsWith('.onnx'))
+}
+
+// 下载文件（跟随重定向，临时文件 + 重命名，带进度回调）
 function downloadFile(url, destPath, onProgress) {
+  const tmpPath = destPath + '.part'
   return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(destPath)
+    const file = fs.createWriteStream(tmpPath)
+    const cleanup = () => {
+      try { file.destroy() } catch {}
+      try { fs.unlinkSync(tmpPath) } catch {}
+    }
     const get = url.startsWith('https') ? https.get : require('http').get
     get(url, (res) => {
       if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
         res.resume()
+        cleanup()
         downloadFile(res.headers.location, destPath, onProgress).then(resolve, reject)
         return
       }
       if (res.statusCode !== 200) {
+        res.resume()
+        cleanup()
         reject(new Error('下载失败，HTTP ' + res.statusCode))
         return
       }
@@ -64,9 +83,34 @@ function downloadFile(url, destPath, onProgress) {
         if (total && onProgress) onProgress(Math.round((received / total) * 100))
       })
       res.pipe(file)
-      file.on('finish', () => file.close(() => resolve()))
-    }).on('error', (e) => { fs.unlink(destPath, () => {}); reject(e) })
+      file.on('finish', () => {
+        file.close(() => {
+          try {
+            fs.renameSync(tmpPath, destPath)
+            resolve()
+          } catch (e) {
+            reject(e)
+          }
+        })
+      })
+    }).on('error', (e) => { cleanup(); reject(e) })
+    file.on('error', (e) => { cleanup(); reject(e) })
   })
+}
+
+// 依次尝试多个下载源
+async function downloadFromSources(urls, archivePath, onProgress) {
+  let lastErr = null
+  for (const u of urls) {
+    try {
+      await downloadFile(u, archivePath, onProgress)
+      return
+    } catch (e) {
+      lastErr = e
+      console.error('[TTS] 下载源失败:', u, e.message)
+    }
+  }
+  throw lastErr || new Error('所有下载源均失败')
 }
 
 // 确保模型已下载并解压
@@ -77,12 +121,18 @@ async function ensureModel(id, onProgress) {
   fs.mkdirSync(dir, { recursive: true })
   if (isModelReady(id)) return
   const archivePath = path.join(dir, m.archive)
+  // 清理损坏的下载残留（0 字节或未完成）
+  try {
+    if (fs.existsSync(archivePath) && fs.statSync(archivePath).size < 1024 * 1024) {
+      fs.unlinkSync(archivePath)
+    }
+  } catch {}
   if (!fs.existsSync(archivePath)) {
-    await downloadFile(m.url, archivePath, onProgress)
+    await downloadFromSources(m.urls, archivePath, onProgress)
   }
   // Windows 自带 bsdtar，支持 .tar.bz2
   execFileSync('tar', ['-xjf', archivePath, '-C', dir])
-  fs.unlink(archivePath, () => {})
+  try { fs.unlinkSync(archivePath) } catch {}
   if (!isModelReady(id)) throw new Error('模型解压失败，缺少 model.onnx')
 }
 
@@ -92,16 +142,21 @@ function ensureSherpa() {
 
 function initTts(id) {
   const dir = getModelDir(id)
+  const onnxFile = findOnnx(dir)
+  if (!onnxFile) throw new Error('模型目录缺少 onnx 文件')
   const vits = {
-    model: path.join(dir, 'model.onnx'),
+    model: path.join(dir, onnxFile),
     tokens: path.join(dir, 'tokens.txt'),
   }
   if (fs.existsSync(path.join(dir, 'lexicon.txt'))) {
     vits.lexicon = path.join(dir, 'lexicon.txt')
   }
+  // 数据目录探测：espeak-ng-data → dictDir；dict/data → dataDir
   const espeakDir = path.join(dir, 'espeak-ng-data')
   const dataDir = path.join(dir, 'data')
+  const dictDir = path.join(dir, 'dict')
   if (fs.existsSync(espeakDir)) vits.dictDir = espeakDir
+  else if (fs.existsSync(dictDir)) vits.dataDir = dictDir
   else if (fs.existsSync(dataDir)) vits.dataDir = dataDir
   const config = {
     model: { vits, debug: false, numThreads: 2, provider: 'cpu' },
