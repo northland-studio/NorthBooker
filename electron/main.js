@@ -7,7 +7,7 @@ const fs = require('fs')
 const url = require('url')
 
 const SITE_URL = 'https://northbooker.xuanjian.top'
-const CDN_URL = 'https://cdn.northbooker.xuanjian.top/releases/'
+const CDN_URL = 'https://northbooker.xuanjian.top/api/updates/'
 
 let mainWindow
 let httpServer

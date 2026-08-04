@@ -4,7 +4,7 @@
  *
  * 测试两个更新源是否可用：
  *   源1: GitHub Release (主源)
- *   源2: Qiniu CDN (备用源)
+ *   源2: CDN 后端代理 (备用源)
  */
 
 const https = require('https')
@@ -15,7 +15,7 @@ const pkg = require('./package.json')
 const GITHUB_OWNER = 'northland-studio'
 const GITHUB_REPO = 'NorthBooker'
 const GITHUB_API = `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}`
-const CDN_BASE = 'https://cdn.northbooker.xuanjian.top/releases'
+const CDN_BASE = 'https://northbooker.xuanjian.top/api/updates'
 
 // ===== 工具函数 =====
 function httpsGet(url) {
@@ -131,10 +131,10 @@ async function testGitHub() {
   return result
 }
 
-// ===== 测试源 2: Qiniu CDN =====
+// ===== 测试源 2: CDN 后端代理 =====
 async function testCDN() {
   const result = { ok: false, version: null, error: null, details: [] }
-  console.log('\n═══ 源2: Qiniu CDN ═══')
+  console.log('\n═══ 源2: CDN (后端代理) ═══')
   console.log(`URL: ${CDN_BASE}`)
 
   // 2.1 获取 latest.yml
@@ -156,7 +156,7 @@ async function testCDN() {
     for (const f of files) {
       if (f.endsWith('.exe') || f.endsWith('.exe.blockmap')) {
         try {
-          const fileUrl = f.startsWith('http') ? f : `${CDN_BASE}/${f}`
+          const fileUrl = f.startsWith('http') ? f : `https://northbooker.xuanjian.top${f.startsWith('/') ? '' : '/'}${f}`
           const fileResp = await httpsGet(fileUrl)
           const status = fileResp.status
           if (f.endsWith('.exe') && !exeChecked) {
@@ -173,12 +173,11 @@ async function testCDN() {
     }
 
     if (!exeChecked) {
-      // .exe 可能不在 files 列表中，尝试推断
       const expectedExe = `北牖 NorthBooker Setup ${version}.exe`
       try {
-        const exeResp = await httpsGet(`${CDN_BASE}/${encodeURI(expectedExe)}`)
+        const exeResp = await httpsGet(`${CDN_BASE}/files/${encodeURIComponent(expectedExe)}`)
         console.log(`  ${expectedExe}: HTTP ${exeResp.status}`)
-        if (exeResp.status === 200) result.ok = true
+        if (exeResp.status >= 200 && exeResp.status < 400) result.ok = true
       } catch (e) {
         console.log(`  ${expectedExe}: 不可达`)
       }
