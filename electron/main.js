@@ -398,12 +398,16 @@ ipcMain.handle('tts-download-model', async (_, id) => {
     return { error: e.message || String(e) }
   }
 })
-ipcMain.handle('tts-synthesize', async (_, { text, model, speed }) => {
-  // 限制单次朗读文本长度，避免合成时间过长
-  const limited = String(text || '').slice(0, 1500)
-  return await tts.synthesize(limited, model, speed, (percent) => {
-    mainWindow?.webContents.send('tts-progress', percent)
+ipcMain.handle('tts-start', async (_, { text, model, speed }) => {
+  return await tts.startStream(String(text || ''), model, speed, {
+    onChunk: (chunk) => mainWindow?.webContents.send('tts-chunk', chunk),
+    onState: (state) => mainWindow?.webContents.send('tts-state', state),
+    onError: (err) => mainWindow?.webContents.send('tts-error', err),
   })
+})
+ipcMain.handle('tts-stop', () => {
+  tts.stopStream()
+  return { ok: true }
 })
 
 ipcMain.handle('load-cloud-font', async (_, { family, url }) => {

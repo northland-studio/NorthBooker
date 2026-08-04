@@ -66,11 +66,16 @@ export default function PageEditor() {
   const [restoreConfirmId, setRestoreConfirmId] = useState<number | null>(null)
   const [ttsStatus, setTtsStatus] = useState<'idle' | 'synthesizing' | 'playing'>('idle')
   const [ttsProgress, setTtsProgress] = useState(0)
+  const [ttsTotal, setTtsTotal] = useState(0)
   const [ttsEnabled, setTtsEnabled] = useState(true)
   const electronAPI = (window as any).electronAPI
   const isApp = !!electronAPI?.isElectron
   const audioCtxRef = useRef<AudioContext | null>(null)
   const ttsSourceRef = useRef<AudioBufferSourceNode | null>(null)
+  const audioQueueRef = useRef<string[]>([])
+  const playingRef = useRef(false)
+  const stopRef = useRef(false)
+  const synthDoneRef = useRef(false)
   const saveTimer = useRef<ReturnType<typeof setTimeout>>()
   // 用 ref 解决 useCallback 闭包陷阱：scheduleSave（空依赖）调用的 doSave 需要最新的状态
   const titleRef = useRef(title)
@@ -284,18 +289,79 @@ export default function PageEditor() {
     electronAPI.getSettings().then((s: any) => {
       if (s?.tts) setTtsEnabled(s.tts.enabled !== false)
     })
-    // 合成进度
-    electronAPI.onTtsProgress?.((p: number) => setTtsProgress(p))
+    // 流式分段：收到合成段落即入队播放
+    electronAPI.onTtsChunk?.((chunk: { index: number; wav?: string; error?: string }) => {
+      if (stopRef.current || !chunk.wav) return
+      audioQueueRef.current.push(chunk.wav)
+      if (!playingRef.current) playNextRef.current()
+    })
+    // 合成状态
+    electronAPI.onTtsState?.((s: { type: string; done?: number; total?: number }) => {
+      if (s.type === 'start') {
+        setTtsStatus('synthesizing')
+        setTtsProgress(0)
+        setTtsTotal(s.total || 0)
+      } else if (s.type === 'progress') {
+        setTtsProgress(s.done || 0)
+      } else if (s.type === 'done') {
+        synthDoneRef.current = true
+        if (!playingRef.current) { setTtsStatus('idle'); setTtsProgress(0) }
+      } else if (s.type === 'stopped') {
+        setTtsStatus('idle')
+        setTtsProgress(0)
+      }
+    })
+    electronAPI.onTtsError?.((e: { error: string }) => {
+      console.error('TTS 错误:', e.error)
+      stopTTSRef.current()
+    })
   }, [isApp])
+
+  // 逐段播放队列
+  const playNext = useCallback(async () => {
+    if (stopRef.current) return
+    const wav = audioQueueRef.current.shift()
+    if (!wav) {
+      playingRef.current = false
+      if (synthDoneRef.current) { setTtsStatus('idle'); setTtsProgress(0) }
+      return
+    }
+    playingRef.current = true
+    setTtsStatus('playing')
+    try {
+      if (!audioCtxRef.current) audioCtxRef.current = new AudioContext()
+      const ctx = audioCtxRef.current
+      await ctx.resume()
+      const buf = await ctx.decodeAudioData(base64ToArrayBuffer(wav))
+      const source = ctx.createBufferSource()
+      source.buffer = buf
+      source.connect(ctx.destination)
+      ttsSourceRef.current = source
+      source.onended = () => { playNext() }
+      source.start()
+    } catch {
+      playNext()
+    }
+  }, [])
 
   // TTS 停止朗读
   const stopTTS = useCallback(() => {
+    stopRef.current = true
     if (window.speechSynthesis) window.speechSynthesis.cancel()
     try { ttsSourceRef.current?.stop() } catch {}
     ttsSourceRef.current = null
+    audioQueueRef.current = []
+    playingRef.current = false
+    synthDoneRef.current = false
+    electronAPI?.ttsStop?.()
     setTtsStatus('idle')
     setTtsProgress(0)
   }, [])
+
+  const playNextRef = useRef(playNext)
+  playNextRef.current = playNext
+  const stopTTSRef = useRef(stopTTS)
+  stopTTSRef.current = stopTTS
 
   // 组件卸载时停止朗读
   useEffect(() => () => stopTTS(), [stopTTS])
@@ -307,46 +373,31 @@ export default function PageEditor() {
     return buf.buffer
   }
 
-  // TTS 朗读文档（从光标位置开始读）
+  // TTS 朗读文档（从光标位置开始读，流式分段合成）
   const handleTTS = async () => {
     if (ttsStatus !== 'idle') { stopTTS(); return }
     if (!editor) return
     const from = editor.state.selection.from
-    let text = editor.state.doc.textBetween(from, editor.state.doc.content.size, '\n')
+    const text = editor.state.doc.textBetween(from, editor.state.doc.content.size, '\n')
     if (!text.trim()) return
-    // 限制长度，避免合成时间过长
-    const MAX_LEN = 1500
-    if (text.length > MAX_LEN) text = text.slice(0, MAX_LEN)
     let ttsCfg = { enabled: true, speed: 0.9, model: 'edge' }
     if (isApp && electronAPI) {
       const s = await electronAPI.getSettings()
       ttsCfg = { ...ttsCfg, ...(s?.tts || {}) }
     }
-    // sherpa-onnx 本地合成（异步，不阻塞主进程）
+    // sherpa-onnx 流式分段合成（worker 线程池预合成）
     if (isApp && ttsCfg.model !== 'edge') {
+      stopRef.current = false
+      audioQueueRef.current = []
+      playingRef.current = false
+      synthDoneRef.current = false
       setTtsStatus('synthesizing')
       setTtsProgress(0)
-      try {
-        const res = await electronAPI.ttsSynthesize({
-          text,
-          model: ttsCfg.model,
-          speed: Number(ttsCfg.speed) || 1.0,
-        })
-        if (res?.error || !res?.wav) { stopTTS(); return }
-        if (!audioCtxRef.current) audioCtxRef.current = new AudioContext()
-        const ctx = audioCtxRef.current
-        await ctx.resume()
-        const buf = await ctx.decodeAudioData(base64ToArrayBuffer(res.wav))
-        const source = ctx.createBufferSource()
-        source.buffer = buf
-        source.connect(ctx.destination)
-        source.onended = () => { ttsSourceRef.current = null; setTtsStatus('idle'); setTtsProgress(0) }
-        ttsSourceRef.current = source
-        setTtsStatus('playing')
-        source.start()
-      } catch {
-        stopTTS()
-      }
+      await electronAPI.ttsStart({
+        text,
+        model: ttsCfg.model,
+        speed: Number(ttsCfg.speed) || 1.0,
+      })
       return
     }
     // Web Speech API（Edge 内置）
@@ -440,7 +491,7 @@ export default function PageEditor() {
           <button
             className={`pe-btn ${ttsStatus !== 'idle' ? 'pe-btn--active' : ''}`}
             onClick={handleTTS}
-            title={ttsStatus === 'synthesizing' ? `合成中 ${ttsProgress}%` : ttsStatus === 'playing' ? '停止朗读' : '朗读文档'}
+            title={ttsStatus === 'synthesizing' ? `合成中 ${ttsProgress}/${ttsTotal}` : ttsStatus === 'playing' ? '停止朗读' : '朗读文档'}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               {ttsStatus !== 'idle' ? (

@@ -24,10 +24,6 @@ const TTS_MODELS = [
   },
 ]
 
-let sherpa = null
-let tts = null
-let ttsModelId = null
-
 function modelsDir() {
   return path.join(app.getPath('userData'), 'tts-models')
 }
@@ -136,10 +132,6 @@ async function ensureModel(id, onProgress) {
   if (!isModelReady(id)) throw new Error('模型解压失败，缺少 model.onnx')
 }
 
-function ensureSherpa() {
-  if (!sherpa) sherpa = require('sherpa-onnx-node')
-}
-
 // 构建模型配置（自动探测 onnx 文件名与数据目录）
 function buildConfig(id) {
   const dir = getModelDir(id)
@@ -165,71 +157,139 @@ function buildConfig(id) {
   }
 }
 
-async function initTts(id) {
-  const config = buildConfig(id)
-  // 异步创建：不阻塞主进程
-  tts = await sherpa.OfflineTts.createAsync(config)
-  ttsModelId = id
-}
+// ===== 流式分段合成（worker 线程池 + 预合成） =====
+const { Worker } = require('worker_threads')
 
-// Float32 PCM → WAV Buffer
-function encodeWav(samples, sampleRate) {
-  const pcm = new Int16Array(samples.length)
-  for (let i = 0; i < samples.length; i++) {
-    const s = Math.max(-1, Math.min(1, samples[i]))
-    pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff
+let streamState = null
+let workerSeq = 0
+
+// 按句号/逗号/分号/换行切分文本为段落（每段约 20~200 字）
+function splitText(text) {
+  const segments = []
+  let cur = ''
+  for (const ch of String(text || '')) {
+    cur += ch
+    if (/[。！？；，、\n]/.test(ch) && cur.trim().length >= 20) {
+      segments.push(cur.trim())
+      cur = ''
+    } else if (cur.trim().length >= 200) {
+      segments.push(cur.trim())
+      cur = ''
+    }
   }
-  const dataSize = pcm.length * 2
-  const wav = Buffer.alloc(44 + dataSize)
-  wav.write('RIFF', 0)
-  wav.writeUInt32LE(36 + dataSize, 4)
-  wav.write('WAVE', 8)
-  wav.write('fmt ', 12)
-  wav.writeUInt32LE(16, 16)
-  wav.writeUInt16LE(1, 20)
-  wav.writeUInt16LE(1, 22)
-  wav.writeUInt32LE(sampleRate, 24)
-  wav.writeUInt32LE(sampleRate * 2, 28)
-  wav.writeUInt16LE(2, 32)
-  wav.writeUInt16LE(16, 34)
-  wav.write('data', 36)
-  wav.writeUInt32LE(dataSize, 40)
-  Buffer.from(pcm.buffer).copy(wav, 44)
-  return wav
+  if (cur.trim()) segments.push(cur.trim())
+  return segments.filter((s) => s.length > 0)
 }
 
-// 合成文本 → { wav: base64 } 或 { error }（异步，不阻塞主进程）
-async function synthesize(text, modelId, speed, onProgress) {
+function createWorker(config) {
+  return new Promise((resolve, reject) => {
+    const w = new Worker(path.join(__dirname, 'tts-worker.js'), { workerData: { config } })
+    const timer = setTimeout(() => { w.terminate(); reject(new Error('模型加载超时')) }, 60000)
+    w.once('message', (m) => {
+      clearTimeout(timer)
+      if (m && m.ready) resolve(w)
+      else reject(new Error((m && m.error) || 'worker 初始化失败'))
+    })
+    w.once('error', (e) => { clearTimeout(timer); reject(e) })
+  })
+}
+
+function synthInWorker(worker, text, speed) {
+  return new Promise((resolve) => {
+    const id = ++workerSeq
+    const onMsg = (msg) => {
+      if (msg && msg.id === id) {
+        worker.off('message', onMsg)
+        resolve(msg)
+      }
+    }
+    worker.on('message', onMsg)
+    worker.postMessage({ id, text, speed })
+  })
+}
+
+// 开始流式朗读：切分段落 → 并行预合成 → 按序推送 chunk
+async function startStream(text, modelId, speed, handlers) {
+  stopStream()
+  const segments = splitText(text)
+  if (!segments.length) {
+    handlers.onState?.({ type: 'done', total: 0 })
+    return { count: 0 }
+  }
+  let config
   try {
-    ensureSherpa()
-    if (!isModelReady(modelId)) {
-      return { error: '模型未就绪，请先在设置中下载' }
-    }
-    if (!tts || ttsModelId !== modelId) await initTts(modelId)
-    const genCfg = new sherpa.GenerationConfig({
-      sid: 0,
-      speed: Number(speed) || 1.0,
-      silenceScale: 0.2,
-    })
-    const audio = await tts.generateAsync({
-      text,
-      enableExternalBuffer: true,
-      generationConfig: genCfg,
-      onProgress: (p) => {
-        if (onProgress && p && typeof p.progress === 'number') {
-          onProgress(Math.max(1, Math.round(p.progress * 100)))
-        }
-        return 1
-      },
-    })
-    if (!audio || !audio.samples || audio.samples.length === 0) {
-      return { error: '合成失败：无音频输出' }
-    }
-    const wav = encodeWav(audio.samples, audio.sampleRate)
-    return { wav: wav.toString('base64') }
+    config = buildConfig(modelId)
   } catch (e) {
+    handlers.onError?.({ error: e.message || String(e) })
     return { error: e.message || String(e) }
   }
+  const workerCount = Math.max(1, Math.min(4, segments.length))
+  const workers = []
+  for (let i = 0; i < workerCount; i++) {
+    try {
+      workers.push(await createWorker(config))
+    } catch (e) {
+      for (const w of workers) w.terminate().catch(() => {})
+      handlers.onError?.({ error: '模型加载失败: ' + (e.message || e) })
+      return { error: e.message || String(e) }
+    }
+  }
+  const state = {
+    segments,
+    workers,
+    speed: Number(speed) || 1.0,
+    handlers,
+    expectedIndex: 0,
+    results: new Map(),
+    stopped: false,
+    total: segments.length,
+    nextIndex: 0,
+  }
+  streamState = state
+  handlers.onState?.({ type: 'start', total: segments.length })
+
+  function pump() {
+    while (state.results.has(state.expectedIndex)) {
+      const msg = state.results.get(state.expectedIndex)
+      state.results.delete(state.expectedIndex)
+      if (msg.ok) state.handlers.onChunk?.({ index: state.expectedIndex, wav: msg.wav })
+      else state.handlers.onChunk?.({ index: state.expectedIndex, error: msg.error })
+      state.expectedIndex++
+      state.handlers.onState?.({ type: 'progress', done: state.expectedIndex, total: state.total })
+    }
+    if (state.expectedIndex >= state.total) {
+      state.handlers.onState?.({ type: 'done', total: state.total })
+      cleanupStream(state)
+    }
+  }
+
+  const launch = async () => {
+    if (state.stopped || state.nextIndex >= state.total) return
+    const index = state.nextIndex++
+    const worker = state.workers[index % state.workers.length]
+    const msg = await synthInWorker(worker, state.segments[index], state.speed)
+    state.results.set(index, msg)
+    pump()
+    launch()
+  }
+
+  for (let i = 0; i < Math.min(workerCount, segments.length); i++) launch()
+  return { count: segments.length }
 }
 
-module.exports = { TTS_MODELS, isModelReady, ensureModel, synthesize }
+function cleanupStream(state) {
+  if (streamState === state) streamState = null
+  for (const w of state.workers) w.terminate().catch(() => {})
+}
+
+function stopStream() {
+  if (streamState) {
+    const s = streamState
+    streamState = null
+    s.stopped = true
+    s.handlers.onState?.({ type: 'stopped' })
+    for (const w of s.workers) w.terminate().catch(() => {})
+  }
+}
+
+module.exports = { TTS_MODELS, isModelReady, ensureModel, startStream, stopStream }
