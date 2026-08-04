@@ -296,7 +296,6 @@ async function startStream(text, modelId, speed, handlers) {
     })
     const audio = await inst.generateAsync({
       text: seg,
-      enableExternalBuffer: true,
       generationConfig: genCfg,
       onProgress: () => 1,
     })
