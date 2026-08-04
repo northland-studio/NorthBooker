@@ -102,7 +102,7 @@ router.get('/files/:key', (req, res) => {
  */
 router.get('/release-notes.json', (_req, res) => {
   try {
-    const signedUrl = signUrl('releases/release-notes.json', 60)
+    const signedUrl = signUrl('releases/release-notes.json', 60) + '&_t=' + Date.now()
     https.get(signedUrl, { headers: { 'Cache-Control': 'no-cache' } }, (qiniuRes) => {
       const chunks = []
       qiniuRes.on('data', (c) => chunks.push(c))
