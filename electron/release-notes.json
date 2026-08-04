@@ -1,9 +1,12 @@
 {
-  "version": "2.5.0",
+  "version": "2.5.1",
   "date": "2026-08-05",
   "changes": [
-    "修复 离线 TTS 朗读失败：改用 node.exe 独立子进程执行 sherpa-onnx 推理，彻底解决 Electron 内置 V8 的 external buffer 限制",
-    "新增 离线模型音色切换：AIShell3 支持 174 种音色，设置面板可选择朗读音色",
-    "新增 朗读句子高亮：TTS 朗读时高亮当前句子并跟随滚动内容"
+    "新增 离线模型 MeloTTS 中英双语（44100Hz 高音质，支持中英混排朗读）",
+    "新增 离线模型 Theresa（804 音色，22050Hz），音色选择更丰富",
+    "新增 TTS 合成进度浮窗：A/B/C/D 四池并行状态实时展示（合成段数、渲染中/已完成），可收起，仅桌面版可见",
+    "优化 TTS 长文朗读：段落上限从 60 段放宽至 600 段，支持整篇长文档朗读",
+    "修复 部分 vits 模型无法加载：移除误配置的 dataDir（jieba dict 目录非 espeak-ng 格式），Melo/Theresa 现已可用",
+    "模型下载支持 GitHub + 七牛 CDN 双源，GitHub 连不上时自动回落国内 CDN"
   ]
 }

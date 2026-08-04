@@ -57,7 +57,8 @@
 - 全文搜索：跨在线文档 FTS5 索引 + 实时高亮
 - 缩略图预览：PDF/Office 文件自动生成缩略图
 - 标记读取：TTS 语音朗读在线文档（Edge 内置 / sherpa-onnx 离线音色模型，支持点哪从哪读）
-- 朗读体验：离线模型 174 种音色可切换，朗读时高亮当前句子并跟随滚动
+- 朗读体验：离线模型多款可选 — AIShell3（174 音色）/ Theresa（804 音色）/ MeloTTS（中英双语 44100Hz），朗读时高亮当前句子并跟随滚动
+- 长文朗读：四池并行流水线合成（上限 600 段），实时进度浮窗展示各池状态
 - 批量操作：多选移动、删除文档 + 在线文档多选批量删除
 - 右键菜单：文档列表 + 在线文档列表支持右键操作
 - 文档版本历史：自动快照 + 回滚
@@ -113,11 +114,12 @@ northbooker/
 │   │   └── qiniu.js           # 七牛对象存储配置
 │   ├── data/                  # SQLite 数据库目录
 │   └── .env.example
-├── electron/                  # Electron 桌面版（v2.5.0 内置前端架构）
+├── electron/                  # Electron 桌面版（v2.5.1 内置前端架构）
 │   ├── main.js                # Electron 主进程
 │   ├── preload.js             # 预加载脚本（contextBridge）
-│   ├── tts.js                 # TTS 离线合成（段落切分 + node.exe 子进程池）
+│   ├── tts.js                 # TTS 离线合成（模型管理 + 段落切分 + node.exe 子进程池）
 │   ├── tts-worker.js          # TTS 推理子进程（sherpa-onnx）
+│   ├── upload-tts-models.js   # 上传 TTS 模型到七牛 CDN
 │   ├── release-notes.json     # 更新说明（同步到 CDN）
 │   ├── renderer/              # 内置前端（自定义标题栏 + 侧边导航）
 │   │   ├── index.html
@@ -382,6 +384,8 @@ QINIU_CDN_DOMAIN=https://cdn.northbooker.xuanjian.top
 ## 桌面版
 
 北牖提供基于 Electron 的桌面客户端，采用内置本地 HTTP 服务器 + Vite 构建前端架构，通过代理访问生产 API。支持自动更新（GitHub + CDN 双源）、云字体、系统托盘、窗口记忆等客制化功能。
+
+离线 TTS 语音合成在桌面端本地运行：内置 node.exe 独立子进程执行 sherpa-onnx 推理（AIShell3 / Theresa / MeloTTS 模型按需下载，GitHub + 七牛 CDN 双源），支持音色切换、朗读句子高亮与四池并行长文合成。
 
 ### 构建桌面应用
 

@@ -179,6 +179,9 @@ export default function PageEditor() {
   const [ttsProgress, setTtsProgress] = useState(0)
   const [ttsTotal, setTtsTotal] = useState(0)
   const [ttsEnabled, setTtsEnabled] = useState(true)
+  // 合成池状态（A/B/C/D）与进度浮窗
+  const [ttsPools, setTtsPools] = useState<{ id: number; name: string; total: number; done: number; current: number | null }[]>([])
+  const [ttsPanelOpen, setTtsPanelOpen] = useState(true)
   const electronAPI = (window as any).electronAPI
   const isApp = !!electronAPI?.isElectron
   const audioCtxRef = useRef<AudioContext | null>(null)
@@ -411,15 +414,19 @@ export default function PageEditor() {
       if (!playingRef.current) playNextRef.current()
     })
     // 合成状态
-    electronAPI.onTtsState?.((s: { type: string; done?: number; total?: number }) => {
+    electronAPI.onTtsState?.((s: { type: string; done?: number; total?: number; pools?: any[] }) => {
       if (s.type === 'start') {
         setTtsStatus('synthesizing')
         setTtsProgress(0)
         setTtsTotal(s.total || 0)
+        setTtsPools(s.pools || [])
+        setTtsPanelOpen(true)
       } else if (s.type === 'progress') {
         setTtsProgress(s.done || 0)
+        if (s.pools) setTtsPools(s.pools)
       } else if (s.type === 'done') {
         synthDoneRef.current = true
+        setTtsPools((prev) => prev.map((p) => ({ ...p, current: null, done: p.total })))
         if (!playingRef.current) { setTtsStatus('idle'); setTtsProgress(0) }
       } else if (s.type === 'stopped') {
         setTtsStatus('idle')
@@ -505,6 +512,7 @@ export default function PageEditor() {
     electronAPI?.ttsStop?.()
     setTtsStatus('idle')
     setTtsProgress(0)
+    setTtsPools([])
   }, [clearHighlight])
 
   const playNextRef = useRef(playNext)
@@ -540,9 +548,11 @@ export default function PageEditor() {
       audioQueueRef.current = []
       playingRef.current = false
       synthDoneRef.current = false
-      // 记录朗读起始位置与切分段落（与主进程规则一致，用于高亮+滚动）
+      // 记录朗读起始位置与切分段落（与主进程规则一致，用于高亮+滚动；Melo 双语不过滤）
       ttsStartPosRef.current = from
-      ttsSegmentsRef.current = splitTextSegments(text).filter((s) => hasChineseText(s.text))
+      const rawSegs = splitTextSegments(text)
+      ttsSegmentsRef.current =
+        ttsCfg.model === 'melo-zh-en' ? rawSegs : rawSegs.filter((s) => hasChineseText(s.text))
       clearHighlight()
       setTtsStatus('synthesizing')
       setTtsProgress(0)
@@ -859,6 +869,55 @@ export default function PageEditor() {
       </div>
 
       {showShare && id && <ShareDialog docId={id} onClose={() => setShowShare(false)} />}
+
+      {/* TTS 合成进度浮窗（仅桌面应用版，可收起） */}
+      {isApp && ttsPools.length > 0 && (
+        <div className={`tts-pool-panel ${ttsPanelOpen ? 'tts-pool-panel--open' : ''}`}>
+          <div className="tts-pool-panel-header">
+            <div className="tts-pool-panel-title">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M11 5 6 9H2v6h4l5 4V5z" />
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+              </svg>
+              <span>TTS 合成进度</span>
+              <span className="tts-pool-panel-total">{ttsProgress}/{ttsTotal}</span>
+            </div>
+            <button
+              className="tts-pool-panel-toggle"
+              onClick={() => setTtsPanelOpen(!ttsPanelOpen)}
+              aria-label={ttsPanelOpen ? '收起' : '展开'}
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                {ttsPanelOpen ? <path d="M18 15l-6-6-6 6" /> : <path d="M6 9l6 6 6-6" />}
+              </svg>
+            </button>
+          </div>
+          {ttsPanelOpen && (
+            <div className="tts-pool-panel-body">
+              {ttsPools.map((p) => (
+                <div key={p.id} className="tts-pool-row">
+                  <span className="tts-pool-name">{p.name}池</span>
+                  <div className="tts-pool-bar-wrap">
+                    <div
+                      className="tts-pool-bar"
+                      style={{ width: p.total ? `${Math.round((p.done / p.total) * 100)}%` : '0%' }}
+                    />
+                  </div>
+                  <span className="tts-pool-state">
+                    {p.current != null
+                      ? `渲染第 ${p.current} 段中`
+                      : p.done >= p.total && p.total > 0
+                        ? '已完成'
+                        : '等待中'}
+                  </span>
+                  <span className="tts-pool-count">{p.done}/{p.total}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }

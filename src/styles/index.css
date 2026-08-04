@@ -2962,6 +2962,102 @@ body.dark .tts-reading-highlight {
   box-shadow: 0 0 0 1px rgba(0, 122, 255, 0.35);
 }
 
+/* TTS 合成进度浮窗 */
+.tts-pool-panel {
+  position: fixed;
+  right: 20px;
+  bottom: 20px;
+  width: 320px;
+  z-index: 300;
+  background: var(--color-bg, #fff);
+  border: 1px solid var(--color-border, #e0e0e0);
+  border-radius: 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--color-text, #222);
+}
+.tts-pool-panel--open {
+  width: 320px;
+}
+.tts-pool-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--color-primary, #004AAD);
+  color: #fff;
+}
+.tts-pool-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+.tts-pool-panel-total {
+  margin-left: 6px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+.tts-pool-panel-toggle {
+  background: transparent;
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  opacity: 0.9;
+}
+.tts-pool-panel-toggle:hover {
+  opacity: 1;
+}
+.tts-pool-panel-body {
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tts-pool-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.tts-pool-name {
+  width: 34px;
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--color-primary, #004AAD);
+}
+.tts-pool-bar-wrap {
+  flex: 1;
+  height: 6px;
+  background: var(--color-border, #e0e0e0);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.tts-pool-bar {
+  height: 100%;
+  background: var(--color-primary, #004AAD);
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+.tts-pool-state {
+  width: 110px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--color-text-muted, #888);
+  text-align: right;
+}
+.tts-pool-count {
+  width: 46px;
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--color-text-muted, #888);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ProseMirror / Tiptap 编辑器样式 */
 .ProseMirror {
   outline: none;

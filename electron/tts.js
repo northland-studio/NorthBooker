@@ -8,10 +8,32 @@ const { execFileSync } = require('child_process')
 
 // 可用音色模型（edge 为系统内置，不在此列）
 // 主源 GitHub Releases，备源后端代理（七牛私有空间签名下载，国内速度快）
-// 注意：官方 release 里 vits-zh-hf-fanchen-C 等部分模型包缺少引擎必需的数据文件
+// 注意：官方 release 里部分模型包缺少引擎必需的数据文件
 // （phontab/espeak-ng-data），无法直接加载，故只收录已验证可用的模型。
 const CDN_PROXY = 'https://northbooker.xuanjian.top/api/updates/files/'
 const TTS_MODELS = [
+  {
+    id: 'melo-zh-en',
+    name: 'MeloTTS 中英双语',
+    speakers: 1,
+    urls: [
+      'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-melo-tts-zh_en.tar.bz2',
+      CDN_PROXY + 'vits-melo-tts-zh_en.tar.bz2',
+    ],
+    archive: 'vits-melo-tts-zh_en.tar.bz2',
+    dir: 'vits-melo-tts-zh_en',
+  },
+  {
+    id: 'theresa',
+    name: 'Theresa（804 音色）',
+    speakers: 804,
+    urls: [
+      'https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-zh-hf-theresa.tar.bz2',
+      CDN_PROXY + 'vits-zh-hf-theresa.tar.bz2',
+    ],
+    archive: 'vits-zh-hf-theresa.tar.bz2',
+    dir: 'vits-zh-hf-theresa',
+  },
   {
     id: 'aishell3',
     name: 'AIShell3（中文多音色）',
@@ -133,7 +155,10 @@ async function ensureModel(id, onProgress) {
   if (!isModelReady(id)) throw new Error('模型解压失败，缺少 model.onnx')
 }
 
-// 构建模型配置（自动探测 onnx 文件名与数据目录）
+// 构建模型配置（自动探测 onnx 模型文件）
+// 说明：sherpa-onnx 的 vits 模型只需 model/tokens/lexicon 即可加载；
+// 不要设置 dataDir/dictDir——那需要 espeak-ng-data 格式数据，而 jieba 的 dict/ 目录不是该格式，
+// 误设会导致加载失败（如 vits-zh-hf-fanchen-C 缺 phontab 报错的根因）。
 function buildConfig(id) {
   const dir = getModelDir(id)
   const onnxFile = findOnnx(dir)
@@ -145,13 +170,6 @@ function buildConfig(id) {
   if (fs.existsSync(path.join(dir, 'lexicon.txt'))) {
     vits.lexicon = path.join(dir, 'lexicon.txt')
   }
-  // 数据目录探测：espeak-ng-data → dictDir；dict/data → dataDir
-  const espeakDir = path.join(dir, 'espeak-ng-data')
-  const dataDir = path.join(dir, 'data')
-  const dictDir = path.join(dir, 'dict')
-  if (fs.existsSync(espeakDir)) vits.dictDir = espeakDir
-  else if (fs.existsSync(dictDir)) vits.dataDir = dictDir
-  else if (fs.existsSync(dataDir)) vits.dataDir = dataDir
   return {
     model: { vits, debug: false, numThreads: 2, provider: 'cpu' },
     maxNumSentences: 2,
@@ -208,10 +226,15 @@ function splitText(text) {
   return segments.filter((s) => s.length > 0)
 }
 
-// 判断文本是否含足够中文（AIShell3 为纯中文模型，英文/数字会被忽略）
+// 判断文本是否含足够中文（纯中文模型无法朗读英文，AIShell3/Theresa 适用）
 function hasChinese(text) {
   const zh = (text.match(/[\u4e00-\u9fff]/g) || []).length
   return zh >= 10 || zh / Math.max(text.length, 1) >= 0.2
+}
+
+// 模型是否支持英文（中英双语模型无需中文过滤）
+function supportsEnglish(modelId) {
+  return modelId === 'melo-zh-en'
 }
 
 function createWorker(config) {
@@ -252,19 +275,19 @@ function synthInWorker(child, text, speed, sid) {
 async function startStream(text, modelId, speed, sid, handlers) {
   stopStream()
   const rawSegments = splitText(text)
-  // 过滤掉几乎不含中文的段落（纯中文模型无法朗读英文）
-  const segments = rawSegments.filter(hasChinese)
+  // 纯中文模型过滤掉几乎不含中文的段落（否则英文部分静音）；双语模型（Melo）不过滤
+  const segments = supportsEnglish(modelId) ? rawSegments : rawSegments.filter(hasChinese)
   const skipped = rawSegments.length - segments.length
   if (!segments.length) {
     handlers.onState?.({ type: 'done', total: 0 })
     return {
       count: 0,
       skipped,
-      error: '内容主要为英文/数字，当前中文模型无法朗读，请切换 Edge 内置模型',
+      error: '内容主要为英文/数字，当前中文模型无法朗读，请切换 Edge 内置或 MeloTTS 双语模型',
     }
   }
-  // 限制单次朗读的段落数，超长文档截断
-  const MAX_SEGMENTS = 60
+  // 限制单次朗读的段落数，超长文档截断（多池并行，上限放宽）
+  const MAX_SEGMENTS = 600
   const truncated = segments.length > MAX_SEGMENTS
   const active = truncated ? segments.slice(0, MAX_SEGMENTS) : segments
   let config
@@ -285,9 +308,23 @@ async function startStream(text, modelId, speed, sid, handlers) {
       return { error: e.message || String(e) }
     }
   }
+  // 各池（A/B/C/D）状态：轮询分配段号，每池记录已分配总数、已完成数、当前合成段
+  const POOL_NAMES = ['A', 'B', 'C', 'D']
+  const pools = workers.map((_, i) => ({
+    id: i,
+    name: POOL_NAMES[i],
+    total: 0,
+    done: 0,
+    current: null,
+  }))
+  // 预计算每池分配段数（index % workerCount 分布）
+  for (let idx = 0; idx < active.length; idx++) {
+    pools[idx % workerCount].total++
+  }
   const state = {
     segments: active,
     workers,
+    pools,
     speed: Number(speed) || 1.0,
     sid: Number(sid) || 0,
     handlers,
@@ -300,11 +337,15 @@ async function startStream(text, modelId, speed, sid, handlers) {
   }
   streamState = state
   console.log(
-    `[TTS] 开始流式朗读: ${active.length} 段 | ${workerCount} 子进程 | 语速 ${state.speed} | 音色 sid ${state.sid}` +
+    `[TTS] 开始流式朗读: ${active.length} 段 | ${workerCount} 子进程(池 ${pools.map((p) => p.name).join('')}) | 语速 ${state.speed} | 音色 sid ${state.sid}` +
       (skipped ? ` | 跳过无中文段落 ${skipped} 段` : '') +
       (truncated ? ` | 截断 ${segments.length - MAX_SEGMENTS} 段` : ''),
   )
-  handlers.onState?.({ type: 'start', total: active.length })
+  handlers.onState?.({ type: 'start', total: active.length, pools })
+
+  function poolState() {
+    return state.pools.map((p) => ({ ...p }))
+  }
 
   function pump() {
     while (state.results.has(state.expectedIndex)) {
@@ -313,12 +354,12 @@ async function startStream(text, modelId, speed, sid, handlers) {
       if (msg.ok) state.handlers.onChunk?.({ index: state.expectedIndex, wav: msg.wav })
       else state.handlers.onChunk?.({ index: state.expectedIndex, error: msg.error })
       state.expectedIndex++
-      state.handlers.onState?.({ type: 'progress', done: state.expectedIndex, total: state.total })
+      state.handlers.onState?.({ type: 'progress', done: state.expectedIndex, total: state.total, pools: poolState() })
     }
     if (state.expectedIndex >= state.total) {
       const totalSec = ((Date.now() - state.t0) / 1000).toFixed(1)
       console.log(`[TTS] 全部 ${state.total} 段合成完成，总耗时 ${totalSec}s`)
-      state.handlers.onState?.({ type: 'done', total: state.total })
+      state.handlers.onState?.({ type: 'done', total: state.total, pools: poolState() })
       cleanupStream(state)
     }
   }
@@ -327,8 +368,10 @@ async function startStream(text, modelId, speed, sid, handlers) {
     if (state.stopped || state.nextIndex >= state.total) return
     const index = state.nextIndex++
     const worker = state.workers[index % state.workers.length]
+    const pool = state.pools[index % state.pools.length]
+    pool.current = index + 1
     const t0 = Date.now()
-    console.log(`[TTS] 段 ${index + 1}/${state.total} 开始合成`)
+    console.log(`[TTS] 段 ${index + 1}/${state.total} 开始合成 (池 ${pool.name})`)
     let msg
     try {
       msg = await Promise.race([
@@ -339,6 +382,8 @@ async function startStream(text, modelId, speed, sid, handlers) {
       msg = { ok: false, error: e.message || String(e) }
     }
     const cost = ((Date.now() - t0) / 1000).toFixed(1)
+    pool.current = null
+    pool.done++
     if (msg.ok) {
       console.log(`[TTS] 段 ${index + 1}/${state.total} 完成 ${(msg.wav.length / 1024).toFixed(0)}KB (${cost}s)`)
     } else {
