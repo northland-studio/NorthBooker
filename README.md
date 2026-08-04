@@ -17,6 +17,7 @@
 ![OAuth](https://img.shields.io/badge/OAuth-2.0-4A90D9)
 ![Tiptap](https://img.shields.io/badge/Tiptap-Rich%20Text-3182CE)
 ![Electron](https://img.shields.io/badge/Electron-31-47848F?logo=electron&logoColor=white)
+![PWA](https://img.shields.io/badge/PWA-Ready-5A0FC8?logo=pwa&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
 ![发布单位](https://img.shields.io/badge/发布单位-北域工作室-004AAD)
@@ -50,6 +51,9 @@
 - 管理后台：统计概览、文档管理、用户管理
 - 明暗双主题：亮色（白 + #004AAD）/ 暗色（#1A1B1D + #004AAD）
 - 桌面应用：Electron 封装（Windows/macOS/Linux），GitHub Actions 自动构建
+- PWA 支持：manifest.json + iOS 主屏幕独立应用模式
+- 下载页：动态版本号 + GitHub / CDN 双源分发
+- 桌面端客制化：云字体预设、本地字体选择、系统托盘、开机启动
 - 响应式布局，适配桌面与移动端
 
 ---
@@ -109,6 +113,7 @@ northbooker/
 │   │   └── app.js
 │   └── package.json           # 桌面版依赖（electron-builder）
 ├── public/                    # 前端静态资源与示例文档
+│   └── manifest.json          # PWA 清单
 ├── .github/workflows/         # GitHub Actions 构建流水线
 │   └── build-electron.yml     # 自动构建三平台桌面应用
 ├── index.html                 # HTML 入口
@@ -357,7 +362,7 @@ QINIU_CDN_DOMAIN=https://cdn.northbooker.xuanjian.top
 ---
 ## 桌面版
 
-北牖提供基于 Electron 的桌面客户端，通过 webview 加载在线生产站点。
+北牖提供基于 Electron 的桌面客户端，采用内置本地 HTTP 服务器 + Vite 构建前端架构，通过代理访问生产 API。支持自动更新（GitHub + CDN 双源）、云字体、系统托盘、窗口记忆等客制化功能。
 
 ### 构建桌面应用
 
@@ -369,9 +374,13 @@ npm run build
 
 构建产物位于 `electron/dist/`，包含 Windows (.exe NSIS 安装包)、macOS (.dmg)、Linux (.AppImage / .deb)。
 
+### 自动更新
+
+桌面版启动 5 秒后自动检查更新，发现新版本时在右下角显示通知卡片（下载进度 + 完成操作）。GitHub Releases 为主源，Qiniu CDN 为备用源。
+
 ### CI/CD 自动构建
 
-推送至 `main` 分支（`electron/` 目录有变更）或手动触发工作流，GitHub Actions 自动构建并上传三平台安装包。
+推送至 `main` 分支（`electron/` 目录有变更）或手动触发工作流，GitHub Actions 自动构建并上传三平台安装包至 GitHub Releases 与 Qiniu CDN。
 
 ---
 
