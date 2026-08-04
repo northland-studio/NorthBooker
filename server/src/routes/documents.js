@@ -44,18 +44,31 @@ router.get('/:id', (req, res) => {
   res.json(toDoc(row))
 })
 
-// 更新文档标题（需管理员权限）
+// 更新文档（标题、所属文件夹等）
 router.put('/:id', authMiddleware, adminMiddleware, (req, res) => {
-  const { title } = req.body
-  if (typeof title !== 'string' || !title.trim()) {
-    return res.status(400).json({ error: '标题不能为空' })
-  }
+  const { title, folder_id, visibility } = req.body
   const updatedAt = new Date().toISOString()
-  const result = db
-    .prepare('UPDATE documents SET title = ?, updated_at = ? WHERE id = ?')
-    .run(title.trim(), updatedAt, req.params.id)
-  if (result.changes === 0) return res.status(404).json({ error: '文档不存在' })
+
+  // 如果传入 title，则更新 title
+  if (typeof title === 'string' && title.trim()) {
+    db.prepare('UPDATE documents SET title = ?, updated_at = ? WHERE id = ?')
+      .run(title.trim(), updatedAt, req.params.id)
+  }
+
+  // 如果传入 folder_id（含 null），则移动文档
+  if (folder_id !== undefined || 'folder_id' in req.body) {
+    db.prepare('UPDATE documents SET folder_id = ?, updated_at = ? WHERE id = ?')
+      .run(folder_id || null, updatedAt, req.params.id)
+  }
+
+  // 如果传入 visibility，则更新可见性
+  if (visibility === 'public' || visibility === 'private') {
+    db.prepare('UPDATE documents SET visibility = ?, updated_at = ? WHERE id = ?')
+      .run(visibility, updatedAt, req.params.id)
+  }
+
   const row = db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id)
+  if (!row) return res.status(404).json({ error: '文档不存在' })
   res.json(toDoc(row))
 })
 
