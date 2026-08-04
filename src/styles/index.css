@@ -1593,6 +1593,44 @@ button {
   gap: 10px;
 }
 
+/* 面包屑路径栏 */
+.path-bar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 20px;
+  font-size: 14px;
+  flex-wrap: wrap;
+}
+
+.path-sep {
+  margin: 0 6px;
+  color: var(--color-text-muted);
+  user-select: none;
+}
+
+.path-item {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.path-item:hover {
+  color: var(--color-primary);
+  background: rgba(0, 74, 173, 0.06);
+}
+
+.path-item:last-child {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
 .btn-ghost {
   padding: 8px 16px;
   border-radius: 10px;
