@@ -4,6 +4,7 @@ import { DocPreview } from '@doc-preview/react'
 import { useThemeStore } from '@/store/theme'
 import { fetchDocumentById } from '@/api/documents'
 import { getFileTypeLabel, formatSize, formatDate } from '@/utils/fileType'
+import { resolveUri } from '@/utils/url'
 import BookmarkButton from '@/components/BookmarkButton'
 import CommentPanel from '@/components/CommentPanel'
 import type { Document, FileType } from '@/types/document'
@@ -45,7 +46,7 @@ export default function Viewer() {
         setDoc(d)
         // Office 文档：预取 ArrayBuffer
         if (OFFICE_TYPES.includes(d.type)) {
-          return fetch(d.uri)
+          return fetch(resolveUri(d.uri))
             .then((r) => {
               if (!r.ok) throw new Error('fetch failed')
               return r.arrayBuffer()
@@ -67,7 +68,7 @@ export default function Viewer() {
         arrayBuffer: officeBuffer,
       }
     }
-    return { uri: doc.uri, fileName: doc.fileName }
+    return { uri: resolveUri(doc.uri), fileName: doc.fileName }
   }, [doc, officeBuffer])
 
   const handleCopyLink = () => {

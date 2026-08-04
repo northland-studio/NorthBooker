@@ -47,3 +47,4 @@ dist.tar.gz
 # Electron 桌面版构建产物
 electron/node_modules
 electron/dist
+electron/renderer-dist

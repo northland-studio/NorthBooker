@@ -1,6 +1,6 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter } from 'react-router-dom'
+import { BrowserRouter, HashRouter } from 'react-router-dom'
 import { registerBuiltinPreviewRenderers, registerPreviewRenderer } from '@doc-preview/core'
 import {
   legacyPptRenderer,
@@ -26,10 +26,14 @@ registerPreviewRenderer(openDocumentRenderer)
 registerPreviewRenderer(officeBlobRenderer)
 registerPreviewRenderer(spreadsheetRenderer)
 
+// Electron 环境用 HashRouter（file:// 协议不支持 BrowserRouter）
+const isElectron = !!(window as any).electronAPI?.isElectron
+const Router = isElectron ? HashRouter : BrowserRouter
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <BrowserRouter>
+    <Router>
       <App />
-    </BrowserRouter>
+    </Router>
   </React.StrictMode>,
 )

@@ -1,14 +1,145 @@
-const { app, BrowserWindow, shell, ipcMain, Menu, protocol } = require('electron')
+const { app, BrowserWindow, shell, ipcMain, Menu } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const path = require('path')
+const http = require('http')
+const https = require('https')
+const fs = require('fs')
+const url = require('url')
 
 const SITE_URL = 'https://northbooker.xuanjian.top'
-const API_URL = SITE_URL + '/api'
 
 let mainWindow
 let authWindow
+let httpServer
 
-function createWindow() {
+// 标题栏 HTML + CSS，注入到每个 index.html 中
+const TITLEBAR = `
+<style>
+body{padding-top:38px!important}
+#nb-titlebar{position:fixed;top:0;left:0;right:0;height:38px;background:#1a1b1d;color:#fff;z-index:99999;display:flex;align-items:center;justify-content:space-between;-webkit-app-region:drag;user-select:none}
+.nb-drag{display:flex;align-items:center;gap:8px;padding:0 12px;height:100%;flex:1}
+.nb-title{font-size:12px;opacity:.9}
+.nb-ctrls{display:flex;height:100%;-webkit-app-region:no-drag}
+.nb-btn{width:42px;height:100%;border:none;background:transparent;color:#ccc;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s}
+.nb-btn:hover{background:rgba(255,255,255,.1);color:#fff}
+.nb-close:hover{background:#e81123}
+</style>
+<div id="nb-titlebar">
+  <div class="nb-drag"><span class="nb-title">北牖 NorthBooker</span></div>
+  <div class="nb-ctrls">
+    <button class="nb-btn" title="检查更新" onclick="window.electronAPI.checkUpdate().then(function(r){if(r.error){alert('更新检查失败: '+r.error)}else if(r.updateAvailable){alert('发现新版本，准备下载...');window.electronAPI.downloadUpdate()}else{alert('已是最新版本')}})">⇑</button>
+    <button class="nb-btn" title="最小化" onclick="window.electronAPI.minimize()">—</button>
+    <button class="nb-btn" title="最大化" onclick="var t=this;window.electronAPI.maximize().then(function(m){t.textContent=m?'❐':'□'})">□</button>
+    <button class="nb-btn nb-close" title="关闭" onclick="window.electronAPI.close()">✕</button>
+  </div>
+</div>
+`
+
+// MIME 类型映射
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript',
+  '.mjs': 'application/javascript',
+  '.css': 'text/css',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.json': 'application/json',
+  '.wasm': 'application/wasm',
+  '.woff2': 'font/woff2',
+  '.woff': 'font/woff',
+  '.ttf': 'font/ttf',
+  '.md': 'text/markdown; charset=utf-8',
+  '.txt': 'text/plain; charset=utf-8',
+}
+
+// 代理请求到生产服务器
+function proxyToProduction(clientReq, clientRes, urlPath) {
+  const target = SITE_URL + urlPath
+  const parsed = url.parse(target)
+  const opts = {
+    hostname: parsed.hostname,
+    port: 443,
+    path: parsed.path,
+    method: clientReq.method,
+    headers: { ...clientReq.headers, host: parsed.hostname },
+  }
+  // 移除 hop-by-hop 头
+  delete opts.headers['accept-encoding']
+
+  const proxyReq = https.request(opts, (proxyRes) => {
+    console.log('[北牖-Proxy]  response:', proxyRes.statusCode, urlPath)
+    // 生产服务器返回 404 → 回退到 SPA index.html
+    if (proxyRes.statusCode === 404) {
+      serveLocalFile(clientRes, path.join(__dirname, 'renderer-dist', 'index.html'))
+      return
+    }
+    const headers = { ...proxyRes.headers }
+    headers['access-control-allow-origin'] = '*'
+    clientRes.writeHead(proxyRes.statusCode, headers)
+    proxyRes.pipe(clientRes)
+  })
+
+  proxyReq.on('error', (e) => {
+    console.error('[北牖-Proxy]  error:', e.message, urlPath)
+    serveLocalFile(clientRes, path.join(__dirname, 'renderer-dist', 'index.html'))
+  })
+
+  // 转发请求体（POST/PUT 等）
+  if (clientReq.method !== 'GET' && clientReq.method !== 'HEAD') {
+    clientReq.pipe(proxyReq)
+  } else {
+    proxyReq.end()
+  }
+}
+
+// 提供本地文件（含标题栏注入）
+function serveLocalFile(res, filePath) {
+  try {
+    const ext = path.extname(filePath).toLowerCase()
+    const contentType = MIME[ext] || 'application/octet-stream'
+    let data = fs.readFileSync(filePath)
+    if (ext === '.html') {
+      data = data.toString().replace('</head>', TITLEBAR + '</head>')
+    }
+    res.writeHead(200, { 'Content-Type': contentType })
+    res.end(data)
+  } catch {
+    res.writeHead(404)
+    res.end('Not found')
+  }
+}
+
+// 启动内置 HTTP 服务器
+function startServer() {
+  const distDir = path.join(__dirname, 'renderer-dist')
+
+  const srv = http.createServer((req, res) => {
+    const urlPath = req.url.split('?')[0]
+    const localPath = path.join(distDir, urlPath === '/' ? 'index.html' : urlPath)
+
+    console.log('[北牖-Proxy]', req.method, urlPath)
+
+    // 1. 本地文件
+    if (fs.existsSync(localPath) && !fs.statSync(localPath).isDirectory()) {
+      console.log('[北牖-Proxy]  serve local:', localPath)
+      serveLocalFile(res, localPath)
+      return
+    }
+
+    // 2. 代理到生产服务器
+    console.log('[北牖-Proxy]  proxy to:', SITE_URL + urlPath)
+    proxyToProduction(req, res, urlPath)
+  })
+
+  return new Promise((resolve) => {
+    srv.listen(0, '127.0.0.1', () => {
+      resolve(srv.address().port)
+    })
+  })
+}
+
+function createWindow(port) {
   mainWindow = new BrowserWindow({
     width: 1280,
     height: 800,
@@ -21,10 +152,16 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      webviewTag: true,
     },
   })
-  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'))
+
+  // 开发模式：打开 DevTools
+  const isDev = process.env.NODE_ENV === 'development' || process.argv.includes('--dev')
+  if (isDev) {
+    mainWindow.webContents.openDevTools({ mode: 'detach' })
+  }
+
+  mainWindow.loadURL(`http://127.0.0.1:${port}`)
   mainWindow.on('closed', () => { mainWindow = null })
   setupAutoUpdater()
 }
@@ -38,7 +175,7 @@ ipcMain.handle('window-maximize', () => {
 ipcMain.handle('window-close', () => mainWindow?.close())
 ipcMain.handle('window-is-maximized', () => mainWindow?.isMaximized())
 
-// OAuth 登录 - 使用嵌入式 BrowserWindow
+// OAuth 登录
 ipcMain.handle('oauth-login', async () => {
   return new Promise((resolve) => {
     authWindow = new BrowserWindow({
@@ -47,22 +184,16 @@ ipcMain.handle('oauth-login', async () => {
     })
     authWindow.loadURL(SITE_URL + '/api/auth/login?redirect=electron')
     authWindow.on('closed', () => { authWindow = null; resolve(null) })
-    // 监听回调
     authWindow.webContents.on('will-redirect', (event, url) => {
       if (url.includes('/callback') || url.includes('access_token=')) {
         event.preventDefault()
         try {
           const u = new URL(url)
           const token = u.searchParams.get('access_token') || u.hash.replace('#access_token=', '')
-          if (token) {
-            // 通过 API 获取用户信息
-            authWindow?.close()
-            resolve(token)
-          }
+          if (token) { authWindow?.close(); resolve(token) }
         } catch { authWindow?.close(); resolve(null) }
       }
     })
-    // 降级：页面加载完成后检查 URL
     authWindow.webContents.on('did-navigate', (event, url) => {
       if (url.includes('access_token=')) {
         try {
@@ -95,9 +226,10 @@ ipcMain.handle('install-update', () => autoUpdater.quitAndInstall())
 
 Menu.setApplicationMenu(null)
 
-app.whenReady().then(() => {
-  createWindow()
+app.whenReady().then(async () => {
+  const port = await startServer()
+  createWindow(port)
   setTimeout(() => autoUpdater.checkForUpdatesAndNotify().catch(() => {}), 5000)
-  app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
+  app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(port) })
 })
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })

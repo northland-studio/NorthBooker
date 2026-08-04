@@ -1,4 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron')
+
+// 暴露 API 给渲染进程（标题栏通过 HTTP 服务器注入 HTML，不在此处操作 DOM）
 contextBridge.exposeInMainWorld('electronAPI', {
   platform: process.platform,
   isElectron: true,

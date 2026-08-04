@@ -1,11 +1,14 @@
 import axios from 'axios'
 import logger from '../utils/logger'
 
+// Electron 环境下使用相对路径 /api，由本地 HTTP 服务器代理到生产服务器
+// （避免跨域请求和 CORS 问题）
+const isElectron = !!(window as any).electronAPI?.isElectron
+const API_BASE = isElectron ? '/api' : '/api'
+
 // 北牖前端统一 axios 实例
-// - baseURL: /api 由 Vite 代理转发到后端（生产由 Nginx 转发）
-// - 自动携带玄剑 OAuth access_token
 const client = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE,
   timeout: 15000,
 })
 
@@ -45,7 +48,10 @@ client.interceptors.response.use(
       // 非登录/回调类的请求才跳转（避免死循环）
       const url = error.config?.url ?? ''
       if (!url.includes('/auth/') && !url.includes('/callback')) {
-        window.location.href = '/api/auth/login?redirect=' + encodeURIComponent(window.location.pathname)
+        const loginUrl = isElectron
+          ? 'https://northbooker.xuanjian.top/api/auth/login?redirect=' + encodeURIComponent(window.location.href)
+          : '/api/auth/login?redirect=' + encodeURIComponent(window.location.pathname)
+        window.location.href = loginUrl
       }
     }
     return Promise.reject(error)

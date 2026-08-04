@@ -20,9 +20,23 @@ function docPreviewWorkerFix(): Plugin {
   }
 }
 
+// 阻止 Cloudflare Rocket Loader 篡改 script/link 标签
+function cloudflareFix(): Plugin {
+  return {
+    name: 'cloudflare-rocket-loader-fix',
+    enforce: 'post',
+    transformIndexHtml(html) {
+      return html
+        .replace(/<script /g, '<script data-cfasync="false" ')
+        .replace(/<link /g, '<link data-cfasync="false" ')
+    },
+  }
+}
+
 // 北牖 NorthBooker 构建配置
 export default defineConfig({
-  plugins: [react(), docPreviewWorkerFix()],
+  plugins: [react(), docPreviewWorkerFix(), cloudflareFix()],
+  base: './',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

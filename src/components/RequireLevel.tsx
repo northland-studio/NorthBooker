@@ -23,8 +23,10 @@ export default function RequireLevel({
 
   // 未登录：跳转后端 /api/auth/login
   if (!user) {
+    const isElectron = !!(window as any).electronAPI?.isElectron
     const redirect = encodeURIComponent(location.pathname + location.search)
-    window.location.href = `/api/auth/login?redirect=${redirect}`
+    const loginBase = isElectron ? 'https://northbooker.xuanjian.top/api/auth/login' : '/api/auth/login'
+    window.location.href = `${loginBase}?redirect=${redirect}`
     return <div className="documents-status">正在跳转登录...</div>
   }
 

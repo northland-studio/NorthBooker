@@ -34,12 +34,14 @@ const webview = document.getElementById('webview')
 
 // === 状态显示 ===
 function showLoading(text) {
+  if (!loadingEl) return
   loadingEl.style.display = 'flex'
   const p = loadingEl.querySelector('p')
   if (p) p.textContent = text || '加载中...'
 }
 
 function hideLoading() {
+  if (!loadingEl) return
   loadingEl.style.display = 'none'
 }
 
@@ -84,11 +86,19 @@ if (webview) {
 
   // 8 秒超时兜底
   setTimeout(() => {
-    if (loadingEl.style.display !== 'none') {
+    if (loadingEl && loadingEl.style.display !== 'none') {
       err('webview 加载超时，强制隐藏 loading')
       hideLoading()
     }
   }, 8000)
+
+  // 兜底：检查 webview 是否在事件注册前已经加载完毕（src 在 HTML 中时可能先于 JS 执行）
+  try {
+    if (!webview.isLoading() && webview.getURL() && webview.getURL() !== 'about:blank') {
+      log('webview 已提前加载完毕，直接隐藏 loading', { url: webview.getURL() })
+      hideLoading()
+    }
+  } catch (_) { /* getURL/isLoading 可能不可用 */ }
 } else {
   err('webview 元素未找到！')
   showLoading('初始化错误: webview 未找到')

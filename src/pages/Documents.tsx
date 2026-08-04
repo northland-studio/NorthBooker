@@ -5,6 +5,7 @@ import { fetchBookmarks } from '@/api/bookmarks'
 import { fetchFolders, createFolder, deleteFolder } from '@/api/folders'
 import type { Folder } from '@/api/folders'
 import type { Document, FileType } from '@/types/document'
+import { resolveUri } from '@/utils/url'
 import DocumentCard from '@/components/DocumentCard'
 import FolderCard from '@/components/FolderCard'
 import PathBar from '@/components/PathBar'
@@ -385,7 +386,7 @@ export default function Documents() {
                 <Link to={`/viewer/${d.id}`} className="doc-list-cell doc-list-cell--name"
                   onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); handleContextMenu(e, 'doc', d.id, d.title) }}>
                   {d.type === 'image' ? (
-                    <img className="doc-list-thumb" src={d.uri} alt={d.title} />
+                    <img className="doc-list-thumb" src={resolveUri(d.uri)} alt={d.title} />
                   ) : (
                     <span className="doc-list-thumb doc-list-thumb--icon"><FileTypeIcon type={d.type} /></span>
                   )}

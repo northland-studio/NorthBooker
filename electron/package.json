@@ -1,12 +1,12 @@
 {
   "name": "northbooker-desktop",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "北牖 NorthBooker 桌面版 - 云端文档查看与在线协作",
   "author": "北域工作室 <morzane_work@foxmail.com>",
   "license": "MIT",
   "main": "main.js",
   "scripts": {
-    "start": "electron .",
+    "start": "electron . --dev",
     "build": "electron-builder"
   },
   "dependencies": {
@@ -26,7 +26,7 @@
     "files": [
       "main.js",
       "preload.js",
-      "renderer/",
+      "renderer-dist/",
       "icon.png",
       "package.json"
     ],
