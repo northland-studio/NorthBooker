@@ -137,17 +137,7 @@ async function testCDN() {
   console.log('\n═══ 源2: Qiniu CDN ═══')
   console.log(`URL: ${CDN_BASE}`)
 
-  // 2.1 测试 CDN 域名连通性
-  try {
-    const baseResp = await httpsGet(CDN_BASE + '/')
-    console.log(`  域名连通: ${baseResp.status}`)
-  } catch (e) {
-    result.error = `CDN 域名不可达: ${e.message}`
-    console.log(`  ✗ ${result.error}`)
-    return result
-  }
-
-  // 2.2 获取 latest.yml
+  // 2.1 获取 latest.yml
   try {
     const ymlResp = await httpsGet(`${CDN_BASE}/latest.yml`)
     if (ymlResp.status !== 200) {
