@@ -7,6 +7,7 @@ const fs = require('fs')
 const url = require('url')
 
 const SITE_URL = 'https://northbooker.xuanjian.top'
+const CDN_URL = 'https://cdn.northbooker.xuanjian.top/releases/'
 
 let mainWindow
 let authWindow
@@ -15,14 +16,14 @@ let httpServer
 // 标题栏 HTML + CSS，注入到每个 index.html 中
 const TITLEBAR = `
 <style>
-body{padding-top:38px!important}
-#nb-titlebar{position:fixed;top:0;left:0;right:0;height:38px;background:#1a1b1d;color:#fff;z-index:99999;display:flex;align-items:center;justify-content:space-between;-webkit-app-region:drag;user-select:none}
-.nb-drag{display:flex;align-items:center;gap:8px;padding:0 12px;height:100%;flex:1}
+body{padding-top:38px!important;margin:0!important}
+#nb-titlebar{position:fixed!important;top:0!important;left:0!important;right:0!important;height:38px!important;background:#1a1b1d!important;color:#fff!important;z-index:99999!important;display:flex!important;align-items:center!important;justify-content:space-between!important;-webkit-app-region:drag;user-select:none}
+.nb-drag{display:flex!important;align-items:center;gap:8px;padding:0 12px;height:100%;flex:1}
 .nb-title{font-size:12px;opacity:.9}
 .nb-ctrls{display:flex;height:100%;-webkit-app-region:no-drag}
 .nb-btn{width:42px;height:100%;border:none;background:transparent;color:#ccc;font-size:14px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:background .15s}
-.nb-btn:hover{background:rgba(255,255,255,.1);color:#fff}
-.nb-close:hover{background:#e81123}
+.nb-btn:hover{background:rgba(255,255,255,.1)!important;color:#fff!important}
+.nb-close:hover{background:#e81123!important}
 </style>
 <div id="nb-titlebar">
   <div class="nb-drag"><span class="nb-title">北牖 NorthBooker</span></div>
@@ -33,7 +34,29 @@ body{padding-top:38px!important}
     <button class="nb-btn nb-close" title="关闭" onclick="window.electronAPI.close()">✕</button>
   </div>
 </div>
-`
+<script>
+(function(){
+  var tb=document.getElementById('nb-titlebar');
+  if(!tb)return;
+  // 将标题栏移到 body 最前面（因为注入在 </body> 前，此时它在底部）
+  document.body.insertBefore(tb,document.body.firstChild);
+  // 监听 DOM 变化，防止标题栏被移除
+  new MutationObserver(function(mutations){
+    mutations.forEach(function(m){
+      for(var i=0;i<m.removedNodes.length;i++){
+        if(m.removedNodes[i]===tb){
+          document.body.insertBefore(tb,document.body.firstChild);
+          document.body.style.paddingTop='38px';
+        }
+      }
+    })
+  }).observe(document.body,{childList:true});
+  // 确保 padding 常驻
+  setInterval(function(){
+    if(document.body.style.paddingTop!=='38px')document.body.style.paddingTop='38px';
+  },1000);
+})();
+</script>`
 
 // MIME 类型映射
 const MIME = {
@@ -100,7 +123,7 @@ function serveLocalFile(res, filePath) {
     const contentType = MIME[ext] || 'application/octet-stream'
     let data = fs.readFileSync(filePath)
     if (ext === '.html') {
-      data = data.toString().replace('</head>', TITLEBAR + '</head>')
+      data = data.toString().replace('</body>', TITLEBAR + '</body>')
     }
     res.writeHead(200, { 'Content-Type': contentType })
     res.end(data)
@@ -212,8 +235,6 @@ ipcMain.handle('get-site-url', () => SITE_URL)
 
 // 自动更新（双源：GitHub 主源 + CDN 备用源）
 function setupAutoUpdater() {
-  const CDN_URL = 'https://cdn.northbooker.xuanjian.top/releases/'
-
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = true
 
