@@ -2962,23 +2962,56 @@ body.dark .tts-reading-highlight {
   box-shadow: 0 0 0 1px rgba(0, 122, 255, 0.35);
 }
 
-/* TTS 合成进度浮窗 */
-.tts-pool-panel {
+/* TTS 合成进度悬浮球（可拖动 + 点击展开/收起） */
+.tts-pool-bubble {
   position: fixed;
-  right: 20px;
-  bottom: 20px;
-  width: 320px;
+  width: 60px;
+  height: 60px;
   z-index: 300;
-  background: var(--color-bg, #fff);
-  border: 1px solid var(--color-border, #e0e0e0);
-  border-radius: 10px;
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-primary, #004AAD);
+  color: #fff;
+  border-radius: 50%;
+  box-shadow: 0 4px 16px rgba(0, 74, 173, 0.35);
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
   overflow: hidden;
   font-size: 13px;
-  color: var(--color-text, #222);
+  transition: width 0.2s ease, height 0.2s ease, border-radius 0.2s ease;
 }
-.tts-pool-panel--open {
-  width: 320px;
+.tts-pool-bubble:active {
+  cursor: grabbing;
+}
+.tts-pool-bubble--open {
+  width: 300px;
+  height: auto;
+  max-height: 340px;
+  align-items: stretch;
+  justify-content: flex-start;
+  border-radius: 10px;
+  background: var(--color-bg, #fff);
+  border: 1px solid var(--color-border, #e0e0e0);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.14);
+  color: var(--color-text, #222);
+  cursor: default;
+}
+.tts-pool-bubble-core {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  pointer-events: none;
+}
+.tts-pool-bubble-count {
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.tts-pool-bubble--open .tts-pool-panel-header {
+  cursor: grab;
 }
 .tts-pool-panel-header {
   display: flex;
@@ -2987,6 +3020,7 @@ body.dark .tts-reading-highlight {
   padding: 10px 14px;
   background: var(--color-primary, #004AAD);
   color: #fff;
+  flex-shrink: 0;
 }
 .tts-pool-panel-title {
   display: flex;
@@ -3017,6 +3051,7 @@ body.dark .tts-reading-highlight {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  overflow-y: auto;
 }
 .tts-pool-row {
   display: flex;
@@ -3056,6 +3091,22 @@ body.dark .tts-reading-highlight {
   color: var(--color-text-muted, #888);
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* 版本对比（主内容区展示） */
+.version-diff-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 60vh;
+  gap: 12px;
+}
+.version-diff-main .version-diff-body {
+  flex: 1;
+  min-height: 0;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px 8px;
 }
 
 /* ProseMirror / Tiptap 编辑器样式 */

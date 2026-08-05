@@ -252,6 +252,10 @@ export default function PageEditor() {
   // 合成池状态（A/B/C/D）与进度浮窗
   const [ttsPools, setTtsPools] = useState<{ id: number; name: string; total: number; done: number; current: number | null }[]>([])
   const [ttsPanelOpen, setTtsPanelOpen] = useState(true)
+  // TTS 进度悬浮球：可拖动 + 点击展开/收起
+  const [bubblePos, setBubblePos] = useState(() => ({ x: window.innerWidth - 96, y: window.innerHeight - 240 }))
+  const bubbleDragRef = useRef<{ dx: number; dy: number; startX: number; startY: number } | null>(null)
+  const bubbleMovedRef = useRef(false)
   const electronAPI = (window as any).electronAPI
   const isApp = !!electronAPI?.isElectron
   const audioCtxRef = useRef<AudioContext | null>(null)
@@ -268,6 +272,21 @@ export default function PageEditor() {
   const titleRef = useRef(title)
   titleRef.current = title
   const doSaveRef = useRef<(() => Promise<void>) | null>(null)
+
+  // 更新目录（编辑时 + 加载内容后都要调用，只读文档也能用目录）
+  const updateToc = (ed: any) => {
+    const items: TocItem[] = []
+    ed.state.doc.descendants((node: any) => {
+      if (node.type.name === 'heading') {
+        items.push({
+          level: node.attrs.level,
+          text: node.textContent,
+          id: `toc-h-${items.length}`,
+        })
+      }
+    })
+    setToc(items)
+  }
 
   const editor = useEditor({
     extensions: [
@@ -293,17 +312,7 @@ export default function PageEditor() {
       // 统计字数（去空白字符）
       setCharCount(ed.state.doc.textContent.replace(/\s/g, '').length)
       // 更新目录
-      const items: TocItem[] = []
-      ed.state.doc.descendants((node) => {
-        if (node.type.name === 'heading') {
-          items.push({
-            level: node.attrs.level,
-            text: node.textContent,
-            id: `toc-h-${items.length}`,
-          })
-        }
-      })
-      setToc(items)
+      updateToc(ed)
     },
     editorProps: {
       attributes: {
@@ -391,6 +400,7 @@ export default function PageEditor() {
         if (editor) {
           editor.commands.setContent(page.content || '')
           setCharCount(editor.state.doc.textContent.replace(/\s/g, '').length)
+          updateToc(editor)
         }
         setLoading(false)
       })
@@ -473,6 +483,28 @@ export default function PageEditor() {
     }
     setDiffStats({ add, del })
     setComparingVersion(v)
+    // 对比直接在主内容区显示，关闭右侧版本历史抽屉
+    setShowVersions(false)
+  }
+
+  // TTS 进度悬浮球拖动 + 点击展开/收起
+  const onBubblePointerDown = (e: React.PointerEvent) => {
+    bubbleMovedRef.current = false
+    bubbleDragRef.current = { dx: e.clientX - bubblePos.x, dy: e.clientY - bubblePos.y, startX: e.clientX, startY: e.clientY }
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+  }
+  const onBubblePointerMove = (e: React.PointerEvent) => {
+    const drag = bubbleDragRef.current
+    if (!drag) return
+    if (Math.abs(e.clientX - drag.startX) > 4 || Math.abs(e.clientY - drag.startY) > 4) bubbleMovedRef.current = true
+    const x = Math.max(8, Math.min(window.innerWidth - 76, e.clientX - drag.dx))
+    const y = Math.max(8, Math.min(window.innerHeight - 260, e.clientY - drag.dy))
+    setBubblePos({ x, y })
+  }
+  const onBubblePointerUp = () => { bubbleDragRef.current = null }
+  const onBubbleClick = () => {
+    if (bubbleMovedRef.current) { bubbleMovedRef.current = false; return }
+    setTtsPanelOpen(!ttsPanelOpen)
   }
 
   const handleShare = () => {
@@ -695,6 +727,13 @@ export default function PageEditor() {
   return (
     <div className="page-editor-page">
       <div className="page-editor-toolbar">
+        <button className="viewer-back" onClick={() => navigate('/pages')} aria-label="返回">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="19" y1="12" x2="5" y2="12" />
+            <polyline points="12 19 5 12 12 5" />
+          </svg>
+          返回
+        </button>
         <div className="page-editor-info">
           {authorAvatar && (
             <img className="page-editor-avatar" src={authorAvatar} alt={authorName} />
@@ -740,67 +779,12 @@ export default function PageEditor() {
           </aside>
         )}
         <div className="page-editor-main">
-          <input
-            className="page-editor-title-input"
-            type="text"
-            value={title}
-            onChange={(e) => handleTitleChange(e.target.value)}
-            placeholder="无标题文档"
-            readOnly={!canEdit}
-          />
-          <div className={`page-editor-wrapper ${!canEdit ? 'page-editor-wrapper--readonly' : ''}`}>
-            <EditorContent editor={editor} />
-          </div>
-        </div>
-      </div>
-
-      {/* 评论悬浮按钮 */}
-      {id && (
-        <>
-          <button
-            className={`comment-fab ${showComments ? 'comment-fab--active' : ''}`}
-            onClick={() => setShowComments(!showComments)}
-            title="评论"
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-          </button>
-          <CommentPanel
-            docId={id}
-            open={showComments}
-            onClose={() => setShowComments(false)}
-          />
-        </>
-      )}
-
-      {/* 版本历史面板 */}
-      {showVersions && <div className="comment-overlay" onClick={() => { setShowVersions(false); setRestoreConfirmId(null); setComparingVersion(null) }} />}
-      <div className={`comment-panel version-panel ${showVersions ? 'comment-panel--open' : ''}`}>
-        <div className="comment-panel-header">
-          <h3>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-            版本历史
-          </h3>
-          <button className="comment-panel-close" onClick={() => { setShowVersions(false); setRestoreConfirmId(null); setComparingVersion(null) }} aria-label="关闭">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
-        </div>
-        <div className="comment-panel-body">
           {comparingVersion ? (
-            <div className="version-diff">
+            <div className="version-diff-main">
               <div className="version-diff-head">
-                <span className="version-diff-title">
-                  版本 {comparingVersion.version} 对比当前
-                </span>
+                <span className="version-diff-title">版本 {comparingVersion.version} 对比当前</span>
                 <button className="version-diff-back" onClick={() => setComparingVersion(null)}>
-                  返回版本列表
+                  返回编辑器
                 </button>
               </div>
               <div className="version-diff-body">
@@ -829,7 +813,52 @@ export default function PageEditor() {
               </div>
             </div>
           ) : (
-            <div className="comment-list">
+            <>
+              <input
+                className="page-editor-title-input"
+                type="text"
+                value={title}
+                onChange={(e) => handleTitleChange(e.target.value)}
+                placeholder="无标题文档"
+                readOnly={!canEdit}
+              />
+              <div className={`page-editor-wrapper ${!canEdit ? 'page-editor-wrapper--readonly' : ''}`}>
+                <EditorContent editor={editor} />
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* 评论面板（按钮在底部栏右下角） */}
+      {id && (
+        <CommentPanel
+          docId={id}
+          open={showComments}
+          onClose={() => setShowComments(false)}
+        />
+      )}
+
+      {/* 版本历史面板 */}
+      {showVersions && <div className="comment-overlay" onClick={() => { setShowVersions(false); setRestoreConfirmId(null); setComparingVersion(null) }} />}
+      <div className={`comment-panel version-panel ${showVersions ? 'comment-panel--open' : ''}`}>
+        <div className="comment-panel-header">
+          <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+            版本历史
+          </h3>
+          <button className="comment-panel-close" onClick={() => { setShowVersions(false); setRestoreConfirmId(null); setComparingVersion(null) }} aria-label="关闭">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18" />
+              <line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+        <div className="comment-panel-body">
+          <div className="comment-list">
               {versionsLoading ? (
                 <div className="comment-empty">加载中...</div>
               ) : versions.length === 0 ? (
@@ -882,56 +911,74 @@ export default function PageEditor() {
                 ))
               )}
             </div>
-          )}
         </div>
       </div>
 
       {showShare && id && <ShareDialog docId={id} onClose={() => setShowShare(false)} />}
 
-      {/* TTS 合成进度浮窗（仅桌面应用版，可收起） */}
+      {/* TTS 合成进度悬浮球（仅桌面应用版）：可拖动 + 点击展开/收起 */}
       {isApp && ttsPools.length > 0 && (
-        <div className={`tts-pool-panel ${ttsPanelOpen ? 'tts-pool-panel--open' : ''}`}>
-          <div className="tts-pool-panel-header">
-            <div className="tts-pool-panel-title">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M11 5 6 9H2v6h4l5 4V5z" />
+        <div
+          className={`tts-pool-bubble ${ttsPanelOpen ? 'tts-pool-bubble--open' : ''}`}
+          style={{ left: bubblePos.x, top: bubblePos.y }}
+          onPointerDown={onBubblePointerDown}
+          onPointerMove={onBubblePointerMove}
+          onPointerUp={onBubblePointerUp}
+          onClick={onBubbleClick}
+          title={ttsPanelOpen ? '' : '点击展开 TTS 合成进度'}
+        >
+          {ttsPanelOpen ? (
+            <>
+              <div className="tts-pool-panel-header">
+                <div className="tts-pool-panel-title">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M11 5 6 9H2v6h4l5 4V5z" />
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                  </svg>
+                  <span>TTS 合成进度</span>
+                  <span className="tts-pool-panel-total">{ttsProgress}/{ttsTotal}</span>
+                </div>
+                <button
+                  className="tts-pool-panel-toggle"
+                  onClick={(e) => { e.stopPropagation(); setTtsPanelOpen(false) }}
+                  aria-label="收起"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M18 15l-6-6-6 6" />
+                  </svg>
+                </button>
+              </div>
+              <div className="tts-pool-panel-body">
+                {ttsPools.map((p) => (
+                  <div key={p.id} className="tts-pool-row">
+                    <span className="tts-pool-name">{p.name}池</span>
+                    <div className="tts-pool-bar-wrap">
+                      <div
+                        className="tts-pool-bar"
+                        style={{ width: p.total ? `${Math.round((p.done / p.total) * 100)}%` : '0%' }}
+                      />
+                    </div>
+                    <span className="tts-pool-state">
+                      {p.current != null
+                        ? `渲染第 ${p.current} 段中`
+                        : p.done >= p.total && p.total > 0
+                          ? '已完成'
+                          : '等待中'}
+                    </span>
+                    <span className="tts-pool-count">{p.done}/{p.total}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="tts-pool-bubble-core">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
                 <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
                 <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
               </svg>
-              <span>TTS 合成进度</span>
-              <span className="tts-pool-panel-total">{ttsProgress}/{ttsTotal}</span>
-            </div>
-            <button
-              className="tts-pool-panel-toggle"
-              onClick={() => setTtsPanelOpen(!ttsPanelOpen)}
-              aria-label={ttsPanelOpen ? '收起' : '展开'}
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                {ttsPanelOpen ? <path d="M18 15l-6-6-6 6" /> : <path d="M6 9l6 6 6-6" />}
-              </svg>
-            </button>
-          </div>
-          {ttsPanelOpen && (
-            <div className="tts-pool-panel-body">
-              {ttsPools.map((p) => (
-                <div key={p.id} className="tts-pool-row">
-                  <span className="tts-pool-name">{p.name}池</span>
-                  <div className="tts-pool-bar-wrap">
-                    <div
-                      className="tts-pool-bar"
-                      style={{ width: p.total ? `${Math.round((p.done / p.total) * 100)}%` : '0%' }}
-                    />
-                  </div>
-                  <span className="tts-pool-state">
-                    {p.current != null
-                      ? `渲染第 ${p.current} 段中`
-                      : p.done >= p.total && p.total > 0
-                        ? '已完成'
-                        : '等待中'}
-                  </span>
-                  <span className="tts-pool-count">{p.done}/{p.total}</span>
-                </div>
-              ))}
+              <span className="tts-pool-bubble-count">{ttsProgress}/{ttsTotal}</span>
             </div>
           )}
         </div>
@@ -940,14 +987,6 @@ export default function PageEditor() {
       {/* 底部栏：非富文本按钮 + 版本对比统计 */}
       <div className="page-editor-bottom-bar">
         <div className="pe-bottom-group pe-bottom-left">
-          <button className="viewer-back" onClick={() => navigate('/pages')} aria-label="返回">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="19" y1="12" x2="5" y2="12" />
-              <polyline points="12 19 5 12 12 5" />
-            </svg>
-            返回
-          </button>
-          <span className="pe-sep" />
           <button
             className={`pe-btn ${showVersions ? 'pe-btn--active' : ''}`}
             onClick={() => {
@@ -1064,6 +1103,17 @@ export default function PageEditor() {
           )}
         </div>
         <div className="pe-bottom-group pe-bottom-right">
+          {id && (
+            <button
+              className={`pe-share-btn ${showComments ? 'pe-btn--active' : ''}`}
+              onClick={() => setShowComments(!showComments)}
+              title="评论"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+              </svg>
+            </button>
+          )}
           {saving && <span className="page-editor-saving">保存中...</span>}
         </div>
       </div>
