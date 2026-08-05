@@ -180,13 +180,21 @@ router.put('/:id', authMiddleware, (req, res) => {
 
   // Save version snapshot before update
   const current = db.prepare('SELECT title, content, author_id FROM pages WHERE id = ?').get(req.params.id)
+  const { title, content, parentId, visibility, tags } = req.body
+  // 防空内容覆盖：文档当前有实质内容时，拒绝用空内容覆盖
+  // （防止协作初始同步异常 / 残留旧页面把空内容写回，导致正文被清空）
+  if (content !== undefined && content !== null) {
+    const strip = (html) => (html || '').replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').trim()
+    if (strip(current?.content).length > 0 && strip(content).length === 0) {
+      return res.status(409).json({ error: '拒绝保存空内容：文档当前包含内容' })
+    }
+  }
   if (current) {
     db.prepare('INSERT INTO page_versions (page_id, title, content, author_id, created_at) VALUES (?, ?, ?, ?, ?)')
       .run(req.params.id, current.title, current.content, current.author_id, new Date().toISOString())
     pruneVersions(req.params.id)
   }
 
-  const { title, content, parentId, visibility, tags } = req.body
   const now = new Date().toISOString()
   db.prepare(
     `UPDATE pages SET title = COALESCE(?, title), content = COALESCE(?, content),

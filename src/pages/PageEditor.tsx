@@ -672,12 +672,13 @@ export default function PageEditor() {
       })
   }, [id, user])
 
-  // 初始内容同步：仅当 Yjs 文档为空时写入初始 HTML；
+  // 初始内容同步：仅当 Yjs 文档"无实质内容"（空文档或仅空段落）时写入初始 HTML；
   // 协作模式（ready）等 provider sync 后再判断，非协作（skipped）直接写入
   const trySeedContent = useCallback(() => {
     if (!editor) return
-    const frag = ydocRef.current!.getXmlFragment('default')
-    if (frag.length === 0 && pageContentRef.current) {
+    // 房间有协作者实质内容时保留房间内容，否则用数据库内容填充（防止空段落被当作有效内容）
+    const hasText = editor.state.doc.textContent.replace(/\s/g, '').length > 0
+    if (!hasText && pageContentRef.current) {
       editor.commands.setContent(pageContentRef.current)
       pageContentRef.current = ''
     }
