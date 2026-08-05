@@ -118,6 +118,9 @@ router.post('/:id/versions/:versionId/restore', authMiddleware, (req, res) => {
   const version = db.prepare('SELECT * FROM page_versions WHERE id = ? AND page_id = ?').get(req.params.versionId, req.params.id)
   if (!version) return res.status(404).json({ error: 'Version not found' })
 
+  // 仅作者本人可恢复版本
+  if (page.author_id !== req.user.id) return res.status(403).json({ error: '只能恢复自己的文档' })
+
   // Save current state as a version (rollback snapshot)
   db.prepare('INSERT INTO page_versions (page_id, title, content, author_id, is_rollback) VALUES (?, ?, ?, ?, 1)')
     .run(req.params.id, page.title, page.content, req.user?.id)
@@ -170,7 +173,7 @@ router.put('/:id', authMiddleware, (req, res) => {
   const page = db.prepare('SELECT * FROM pages WHERE id = ?').get(req.params.id)
   if (!page) return res.status(404).json({ error: '页面不存在' })
 
-  const canEdit = page.author_id === req.user.id || req.user.level >= 1
+  const canEdit = page.author_id === req.user.id
   if (!canEdit) return res.status(403).json({ error: '只能编辑自己的文档' })
 
   // Save version snapshot before update
@@ -198,7 +201,7 @@ router.delete('/:id', authMiddleware, (req, res) => {
   const page = db.prepare('SELECT * FROM pages WHERE id = ?').get(req.params.id)
   if (!page) return res.status(404).json({ error: '页面不存在' })
 
-  const canDelete = page.author_id === req.user.id || req.user.level >= 1
+  const canDelete = page.author_id === req.user.id
   if (!canDelete) return res.status(403).json({ error: '只能删除自己的文档' })
 
   db.prepare('UPDATE pages SET parent_id = NULL WHERE parent_id = ?').run(req.params.id)
@@ -210,6 +213,9 @@ router.delete('/:id', authMiddleware, (req, res) => {
 router.patch('/:id/move', authMiddleware, (req, res) => {
   const page = db.prepare('SELECT * FROM pages WHERE id = ?').get(req.params.id)
   if (!page) return res.status(404).json({ error: '页面不存在' })
+
+  // 仅作者本人可移动
+  if (page.author_id !== req.user.id) return res.status(403).json({ error: '只能移动自己的文档' })
 
   const { parentId, sortOrder } = req.body
   db.prepare(
