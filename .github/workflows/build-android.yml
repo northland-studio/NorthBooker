@@ -65,7 +65,8 @@ jobs:
         id: version
         working-directory: Android
         run: |
-          echo "versionName=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+          # 以 android/app/build.gradle 为版本号唯一来源
+          echo "versionName=$(grep -oP 'versionName \"\K[^\"]+' android/app/build.gradle | head -1)" >> $GITHUB_OUTPUT
           echo "versionCode=$(grep -oP 'versionCode \K\d+' android/app/build.gradle | head -1)" >> $GITHUB_OUTPUT
 
       - name: Upload to Qiniu CDN (仅 CDN 分发)
