@@ -14,6 +14,8 @@ const tts = require('./tts.js')
 let mainWindow
 let httpServer
 let tray
+// 多窗口（2.6.0）：辅助窗口集合，防止被 GC 回收
+const extraWindows = new Set()
 
 // 持久化存储
 const store = new Store({
@@ -294,6 +296,32 @@ function createWindow(port) {
   setupAutoUpdater()
 }
 
+// ===== 多窗口（2.6.0） =====
+function createExtraWindow(hash = '') {
+  const win = new BrowserWindow({
+    width: 1100,
+    height: 720,
+    minWidth: 720,
+    minHeight: 480,
+    title: '北牖 NorthBooker',
+    icon: iconPath,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  })
+  win.loadURL(`http://127.0.0.1:${app.port}${hash}`)
+  win.on('closed', () => extraWindows.delete(win))
+  extraWindows.add(win)
+  return win
+}
+
+ipcMain.handle('window-new', (_, hash) => {
+  createExtraWindow(typeof hash === 'string' ? hash : '')
+  return { ok: true }
+})
+
 // ===== 托盘 =====
 function createTray() {
   const icon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 })
@@ -309,6 +337,15 @@ function createTray() {
       },
     },
     {
+      label: '新建窗口',
+      click: () => createExtraWindow(),
+    },
+    {
+      label: '打开网页版',
+      click: () => shell.openExternal(SITE_URL),
+    },
+    { type: 'separator' },
+    {
       label: '检查更新',
       click: () => checkUpdatesDualSource(),
     },
@@ -322,6 +359,11 @@ function createTray() {
         app.setLoginItemSettings({ openAtLogin: enabled })
         store.set('autoLaunch', enabled)
       },
+    },
+    { type: 'separator' },
+    {
+      label: `关于 北牖 v${app.getVersion()}`,
+      enabled: false,
     },
     {
       label: '退出',
