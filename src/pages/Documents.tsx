@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { fetchDocumentsByFolder, moveDocument } from '@/api/documents'
+import { fetchDocumentsByFolder, moveDocument, updateDocument, trashDocument, fetchTrash, restoreDocument, permanentDeleteDocument } from '@/api/documents'
 import { fetchBookmarks } from '@/api/bookmarks'
 import { fetchFolders, createFolder, deleteFolder } from '@/api/folders'
 import ShareDialog from '@/components/ShareDialog'
@@ -57,6 +57,9 @@ export default function Documents() {
   const [keyword, setKeyword] = useState('')
   const [filter, setFilter] = useState<FilterType>('all')
   const [sort, setSort] = useState<'updated' | 'title'>('updated')
+  // 标签筛选 + 最近文档（2.6.0）
+  const [tagFilter, setTagFilter] = useState<string | null>(null)
+  const [recentOnly, setRecentOnly] = useState(false)
   const [showUpload, setShowUpload] = useState(false)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>(() => {
     // Electron 桌面端从持久化设置读取默认视图模式
@@ -99,6 +102,26 @@ export default function Documents() {
   const [moveFolderOpen, setMoveFolderOpen] = useState(false)
   const [shareOpen, setShareOpen] = useState(false)
   const [shareDocId, setShareDocId] = useState('')
+  // 回收站
+  const [showTrash, setShowTrash] = useState(false)
+  const [trashDocs, setTrashDocs] = useState<Document[]>([])
+  const [trashLoading, setTrashLoading] = useState(false)
+
+  const loadTrash = useCallback(async () => {
+    setTrashLoading(true)
+    try {
+      setTrashDocs(await fetchTrash())
+    } catch { setTrashDocs([]) } finally { setTrashLoading(false) }
+  }, [])
+
+  const handleTrashRestore = async (id: string) => {
+    try { await restoreDocument(id); loadTrash() } catch { alert('恢复失败') }
+  }
+
+  const handleTrashPermanent = async (doc: Document) => {
+    if (!confirm(`永久删除「${doc.title}」？此操作不可恢复，七牛中的文件也会被删除。`)) return
+    try { await permanentDeleteDocument(doc.id); loadTrash() } catch { alert('删除失败') }
+  }
 
   const load = useCallback(() => {
     setLoading(true)
@@ -125,13 +148,25 @@ export default function Documents() {
   const filtered = useMemo(() => {
     let list = filter === 'bookmarks' ? bookmarkDocs : docs
     if (filter !== 'all' && filter !== 'bookmarks') list = list.filter((d) => d.type === filter)
+    if (tagFilter) list = list.filter((d) => d.tags?.includes(tagFilter))
+    if (recentOnly) {
+      const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
+      list = list.filter((d) => new Date(d.updatedAt).getTime() >= weekAgo)
+    }
     const kw = keyword.trim()
     if (kw) list = list.filter((d) => d.title.includes(kw))
     return [...list].sort((a, b) => {
       if (sort === 'title') return a.title.localeCompare(b.title, 'zh')
       return b.updatedAt.localeCompare(a.updatedAt)
     })
-  }, [docs, bookmarkDocs, filter, keyword, sort])
+  }, [docs, bookmarkDocs, filter, keyword, sort, tagFilter, recentOnly])
+
+  // 全部标签（智能分类：按文档上的标签自动聚合）
+  const allTags = useMemo(() => {
+    const set = new Set<string>()
+    docs.forEach((d) => d.tags?.forEach((t) => set.add(t)))
+    return Array.from(set).sort((a, b) => a.localeCompare(b, 'zh'))
+  }, [docs])
 
   const filteredFolders = useMemo(() => {
     const kw = keyword.trim()
@@ -185,10 +220,9 @@ export default function Documents() {
   }
 
   const handleDeleteDoc = async (doc: Document) => {
-    if (!confirm(`确定要删除文档「${doc.title}」吗？`)) return
+    if (!confirm(`确定要删除文档「${doc.title}」吗？将移入回收站。`)) return
     try {
-      const client = (await import('@/api/client')).default
-      await client.delete(`/admin/documents/${doc.id}`)
+      await trashDocument(doc.id)
       load()
     } catch { alert('删除失败') }
   }
@@ -379,11 +413,10 @@ export default function Documents() {
   }
 
   const handleBatchDelete = async () => {
-    if (!confirm(`确定要删除选中的 ${selectedIds.size} 个文档吗？`)) return
+    if (!confirm(`确定要删除选中的 ${selectedIds.size} 个文档吗？将移入回收站。`)) return
     const ids = Array.from(selectedIds)
     try {
-      const client = (await import('@/api/client')).default
-      await Promise.all(ids.map((id) => client.delete(`/admin/documents/${id}`)))
+      await Promise.all(ids.map((id) => trashDocument(id)))
       load()
       clearSelection()
     } catch { alert('删除失败') }
@@ -471,6 +504,34 @@ export default function Documents() {
             </button>
           ))}
         </div>
+        {allTags.length > 0 && (
+          <div className="tag-filter-row">
+            {allTags.map((t) => (
+              <button
+                key={t}
+                className={`tag-chip ${tagFilter === t ? 'tag-chip--active' : ''}`}
+                onClick={() => setTagFilter(tagFilter === t ? null : t)}
+              >
+                #{t}
+              </button>
+            ))}
+            {tagFilter && (
+              <button className="tag-chip tag-chip--clear" onClick={() => setTagFilter(null)}>
+                清除
+              </button>
+            )}
+          </div>
+        )}
+        <button
+          className={`btn-ghost ${recentOnly ? 'btn-ghost--active' : ''}`}
+          onClick={() => setRecentOnly(!recentOnly)}
+          title="最近 7 天更新的文档"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+          </svg>
+          最近
+        </button>
         <select
           className="sort-select"
           value={sort}
@@ -493,6 +554,18 @@ export default function Documents() {
             </svg>
           </button>
         </div>
+        {user && (
+          <button
+            className={`btn-ghost ${showTrash ? 'btn-ghost--active' : ''}`}
+            onClick={() => { setShowTrash(!showTrash); if (!showTrash) loadTrash() }}
+            title="回收站"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
+            回收站
+          </button>
+        )}
         {canUpload && (
           <>
             <button className="btn-ghost" onClick={handleCreateFolder} title="新建文件夹">
@@ -513,7 +586,44 @@ export default function Documents() {
         )}
       </div>
 
-      {loading ? (
+      {showTrash ? (
+        <div className="doc-list">
+          <div className="doc-list-header">
+            <span className="doc-list-cell doc-list-cell--name">名称（回收站）</span>
+            <span className="doc-list-cell doc-list-cell--type">类型</span>
+            <span className="doc-list-cell doc-list-cell--size">大小</span>
+            <span className="doc-list-cell doc-list-cell--date">删除时间</span>
+            <span className="doc-list-cell doc-list-cell--actions" />
+          </div>
+          {trashLoading ? (
+            <div className="documents-status">加载中...</div>
+          ) : trashDocs.length === 0 ? (
+            <div className="documents-status">回收站为空</div>
+          ) : (
+            trashDocs.map((d) => (
+              <div key={d.id} className="doc-list-row">
+                <div className="doc-list-cell doc-list-cell--name">
+                  {d.type === 'image' || d.thumbnail ? (
+                    <img className="doc-list-thumb" src={d.thumbnail || resolveUri(d.uri)} alt={d.title} />
+                  ) : (
+                    <span className="doc-list-thumb doc-list-thumb--icon"><FileTypeIcon type={d.type} /></span>
+                  )}
+                  <span className="doc-list-title">{d.title}</span>
+                </div>
+                <span className="doc-list-cell doc-list-cell--type"><span className="doc-tag">{getFileTypeLabel(d.type)}</span></span>
+                <span className="doc-list-cell doc-list-cell--size">{formatSize(d.size)}</span>
+                <span className="doc-list-cell doc-list-cell--date">{formatDate(d.deletedAt || d.updatedAt)}</span>
+                <span className="doc-list-cell doc-list-cell--actions">
+                  <button className="link-btn" onClick={() => handleTrashRestore(d.id)}>恢复</button>
+                  {isAdmin(user) && (
+                    <button className="link-btn danger" onClick={() => handleTrashPermanent(d)}>永久删除</button>
+                  )}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      ) : loading ? (
         <div className="documents-status">加载中...</div>
       ) : error ? (
         <div className="documents-status">文档加载失败，请稍后重试</div>
@@ -705,6 +815,15 @@ export default function Documents() {
               {canUpload && (
                 <>
                   <div className="ctx-menu-sep" />
+                  <button className="ctx-menu-item" onClick={() => {
+                    const tagsInput = prompt('编辑标签（用逗号分隔，最多 10 个）：')
+                    if (tagsInput !== null) {
+                      const tags = tagsInput.split(/[,，]/).map((t) => t.trim()).filter(Boolean)
+                      updateDocument(ctxMenu.id, { tags }).then(() => { load(); closeCtxMenu() }).catch(() => alert('设置标签失败'))
+                    }
+                  }}>
+                    🏷️ 编辑标签
+                  </button>
                   <button className="ctx-menu-item ctx-menu-item--danger" onClick={() => {
                     handleToggleVisibility({ id: ctxMenu.id, title: ctxMenu.title } as Document)
                     closeCtxMenu()

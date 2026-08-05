@@ -10,6 +10,10 @@ export interface Document {
   size: number // 字节数
   updatedAt: string // ISO 时间字符串
   thumbnail?: string
+  visibility?: 'public' | 'private'
+  owner_id?: number | null
+  tags?: string[]
+  deletedAt?: string | null
 }
 
 export interface Comment {

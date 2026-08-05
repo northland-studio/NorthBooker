@@ -37,3 +37,33 @@ export async function fetchDocumentById(id: string): Promise<Document | null> {
     throw err
   }
 }
+
+// 更新文档（标题 / 可见性 / 标签等）
+export async function updateDocument(
+  id: string,
+  patch: { title?: string; visibility?: 'public' | 'private'; tags?: string[] },
+): Promise<Document> {
+  const { data } = await client.put<Document>(`/documents/${id}`, patch)
+  return data
+}
+
+// 软删除：移入回收站
+export async function trashDocument(id: string): Promise<void> {
+  await client.delete(`/documents/${id}`)
+}
+
+// 回收站列表
+export async function fetchTrash(): Promise<Document[]> {
+  const { data } = await client.get<Document[]>('/documents/trash')
+  return data
+}
+
+// 从回收站恢复
+export async function restoreDocument(id: string): Promise<void> {
+  await client.post(`/documents/${id}/restore`)
+}
+
+// 永久删除（回收站内彻底删除）
+export async function permanentDeleteDocument(id: string): Promise<void> {
+  await client.delete(`/documents/${id}/permanent`)
+}

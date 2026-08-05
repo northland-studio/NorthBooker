@@ -50,6 +50,13 @@ export default function DocumentCard({ doc, showCheckbox, checked, onToggle }: {
             <span>{formatSize(doc.size)}</span>
             <span>{formatDate(doc.updatedAt)}</span>
           </div>
+          {doc.tags && doc.tags.length > 0 && (
+            <div className="doc-card-tags">
+              {doc.tags.slice(0, 3).map((t) => (
+                <span key={t} className="doc-card-tag">{t}</span>
+              ))}
+            </div>
+          )}
         </div>
       </Link>
       {showCheckbox && (
