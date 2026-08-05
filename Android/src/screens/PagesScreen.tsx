@@ -21,11 +21,12 @@ interface Row {
   title: string
   depth: number
   hasChildren: boolean
+  wordCount?: number
 }
 
 function flatten(nodes: PageNode[], depth: number, out: Row[] = []): Row[] {
   for (const n of nodes) {
-    out.push({ id: n.id, title: n.title, depth, hasChildren: !!n.children?.length })
+    out.push({ id: n.id, title: n.title, depth, hasChildren: !!n.children?.length, wordCount: n.word_count })
     if (n.children?.length) flatten(n.children, depth + 1, out)
   }
   return out
@@ -117,9 +118,14 @@ export default function PagesScreen() {
             onPress={() => navigation.navigate('PageEditor', { id: item.id, title: item.title })}
           >
             {item.hasChildren && <View style={[styles.branch, { borderColor: c.primary }]} />}
-            <Text style={[styles.rowTitle, { color: c.text }]} numberOfLines={1}>
-              {item.title}
-            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.rowTitle, { color: c.text }]} numberOfLines={1}>
+                {item.title}
+              </Text>
+              {!!item.wordCount && item.wordCount > 0 && (
+                <Text style={[styles.rowMeta, { color: c.subText }]}>共 {item.wordCount} 字</Text>
+              )}
+            </View>
           </TouchableOpacity>
         )}
       />
@@ -144,6 +150,7 @@ const styles = StyleSheet.create({
   },
   branch: { width: 6, height: 6, borderRadius: 3, borderWidth: 1, marginRight: 10 },
   rowTitle: { fontSize: 15 },
+  rowMeta: { fontSize: 12, marginTop: 2 },
   primaryBtn: { marginTop: 16, paddingHorizontal: 28, paddingVertical: 10, borderRadius: 8 },
   primaryBtnText: { color: '#fff', fontSize: 15, fontWeight: '600' },
   emptyTitle: { fontSize: 18, fontWeight: '700' },

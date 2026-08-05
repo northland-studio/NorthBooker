@@ -25,6 +25,7 @@ export interface PageNode {
   updated_at: string
   author_id: string
   author_name?: string
+  word_count?: number
   children?: PageNode[]
 }
 

@@ -266,6 +266,9 @@ export default function Pages() {
                   <span className={`page-vis-badge ${getField(node, 'visibility', 'visibility') === 'public' ? 'vis-public' : 'vis-private'}`}>
                     {getField(node, 'visibility', 'visibility') === 'public' ? '公开' : '私有'}
                   </span>
+                  {Number(getField(node, 'wordCount', 'word_count') || 0) > 0 && (
+                    <span>共 {getField(node, 'wordCount', 'word_count')} 字</span>
+                  )}
                   <span>{formatDate(getField(node, 'updatedAt', 'updated_at'))}</span>
                 </span>
                 {canDeleteNode(node) && (

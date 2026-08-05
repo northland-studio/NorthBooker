@@ -156,6 +156,7 @@ export default function PageEditor() {
   const user = useAuthStore((s) => s.user)
   const theme = useThemeStore((s) => s.theme)
   const [title, setTitle] = useState('')
+  const [charCount, setCharCount] = useState(0)
   const [authorName, setAuthorName] = useState('')
   const [authorId, setAuthorId] = useState<number>(0)
   const [authorAvatar, setAuthorAvatar] = useState<string | null>(null)
@@ -220,6 +221,8 @@ export default function PageEditor() {
     ],
     onUpdate: ({ editor: ed }) => {
       scheduleSave()
+      // 统计字数（去空白字符）
+      setCharCount(ed.state.doc.textContent.replace(/\s/g, '').length)
       // 更新目录
       const items: TocItem[] = []
       ed.state.doc.descendants((node) => {
@@ -320,6 +323,7 @@ export default function PageEditor() {
         setUpdatedAt(page.updatedAt ?? page.updated_at)
         if (editor) {
           editor.commands.setContent(page.content || '')
+          setCharCount(editor.state.doc.textContent.replace(/\s/g, '').length)
         }
         setLoading(false)
       })
@@ -619,6 +623,13 @@ export default function PageEditor() {
             <span className="page-editor-time">创建于 {formatDate(createdAt)}</span>
           )}
           <span className="page-editor-time">更新于 {formatDate(updatedAt)}</span>
+          <span className="page-editor-time" title="文档字数">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M4 5c0-1.1.9-2 2-2h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
+              <path d="M18 5c0-1.1-.9-2-2-2h-4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2z" />
+            </svg>
+            {charCount} 字
+          </span>
           <button className={`pe-share-btn ${copied ? 'pe-share-btn--copied' : ''}`} onClick={handleShare} title="复制链接">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               {copied ? (

@@ -10,6 +10,16 @@ function generateId() {
   return crypto.randomBytes(12).toString('base64url')
 }
 
+// 统计纯文本字数：去除 HTML 标签/实体与空白，按字符计数
+function countWords(html) {
+  const text = String(html || '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;|&ensp;|&emsp;/gi, ' ')
+    .replace(/&[a-z]+;/gi, ' ')
+    .replace(/\s+/g, '')
+  return text.length
+}
+
 // 每个页面最多保留 5 条版本历史，超出删除最旧的
 function pruneVersions(pageId, limit = 5) {
   db.prepare(
@@ -24,7 +34,10 @@ function buildTree(rows) {
   const map = new Map()
   const roots = []
   for (const r of rows) {
-    map.set(r.id, { ...r, children: [] })
+    // 计算字数后剔除 content，避免树接口传输大段正文
+    const wordCount = countWords(r.content)
+    const { content, ...node } = r
+    map.set(r.id, { ...node, word_count: wordCount, children: [] })
   }
   for (const r of rows) {
     const node = map.get(r.id)
@@ -46,7 +59,7 @@ router.get('/tree', optionalAuthMiddleware, (req, res) => {
     // 只看我自己的文档（不论公开/私有）
     rows = db
       .prepare(
-        `SELECT p.id, p.title, p.parent_id, p.sort_order, p.visibility,
+        `SELECT p.id, p.title, p.content, p.parent_id, p.sort_order, p.visibility,
                 p.created_at, p.updated_at, p.author_id,
                 u.username AS author_name, u.avatar AS author_avatar
          FROM pages p
@@ -59,7 +72,7 @@ router.get('/tree', optionalAuthMiddleware, (req, res) => {
     // 已登录：看公开文档 + 自己的私有文档
     rows = db
       .prepare(
-        `SELECT p.id, p.title, p.parent_id, p.sort_order, p.visibility,
+        `SELECT p.id, p.title, p.content, p.parent_id, p.sort_order, p.visibility,
                 p.created_at, p.updated_at, p.author_id,
                 u.username AS author_name, u.avatar AS author_avatar
          FROM pages p
@@ -72,7 +85,7 @@ router.get('/tree', optionalAuthMiddleware, (req, res) => {
     // 未登录：只看公开文档
     rows = db
       .prepare(
-        `SELECT p.id, p.title, p.parent_id, p.sort_order, p.visibility,
+        `SELECT p.id, p.title, p.content, p.parent_id, p.sort_order, p.visibility,
                 p.created_at, p.updated_at, p.author_id,
                 u.username AS author_name, u.avatar AS author_avatar
          FROM pages p
