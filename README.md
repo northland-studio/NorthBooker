@@ -66,6 +66,7 @@
 - 批量操作：多选移动、删除文档 + 在线文档多选批量删除
 - 右键菜单：文档列表 + 在线文档列表支持右键操作
 - 文档版本历史：自动快照 + 回滚
+- 字数统计：在线文档编辑器实时显示字数，文档列表显示每篇文档字数（网页 / 桌面 / Android 三端同步）
 - 密码分享：带密码和过期的分享链接
 - 更新通知：WebSocket 实时推送 + 系统原生通知
 - 响应式布局，适配桌面与移动端
@@ -123,7 +124,7 @@ northbooker/
 │   │   └── qiniu.js           # 七牛对象存储配置
 │   ├── data/                  # SQLite 数据库目录
 │   └── .env.example
-├── electron/                  # Electron 桌面版（v2.5.1 内置前端架构）
+├── electron/                  # Electron 桌面版（v2.5.2 内置前端架构）
 │   ├── main.js                # Electron 主进程
 │   ├── preload.js             # 预加载脚本（contextBridge）
 │   ├── tts.js                 # TTS 离线合成（模型管理 + 段落切分 + node.exe 子进程池）

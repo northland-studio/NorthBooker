@@ -3,6 +3,17 @@
 本文件记录北牖（NorthBooker）项目的版本演进与变更内容。
 发布单位：北域工作室（Northland Studio）
 
+## v2.5.2 (Electron) — 2026-08-05
+
+### 新增
+
+- **功能**：在线文档显示字数 — 编辑器工具栏实时统计文档字数（输入时自动刷新），文档列表页显示每篇文档字数，网页端 / 桌面端 / Android 端同步生效
+
+### 修复
+
+- **修复**：CI 构建失败（npm ci Invalid Version）— electron 依赖锁中 sherpa-onnx 平台包（sherpa-onnx-darwin-x64）缺失 version 字段导致 npm 解析失败，补齐版本号并加强锁文件完整性校验
+- **修复**：Android CI 构建失败 — gradlew 缺失可执行权限，CI 增加 chmod +x 后再构建
+
 ## v1.0.0 (Android) — 2026-08-05
 
 ### 新增
