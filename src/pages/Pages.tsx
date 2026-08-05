@@ -12,6 +12,7 @@ interface PageNode {
   visibility: string
   authorId: number
   authorName: string
+  authorAvatar?: string | null
   createdAt: string
   updatedAt: string
   children: PageNode[]
@@ -262,7 +263,27 @@ export default function Pages() {
                   {node.title}
                 </Link>
                 <span className="page-tree-meta">
-                  <span>{getField(node, 'authorName', 'author_name')}</span>
+                  {getField(node, 'authorName', 'author_name') && (
+                    <button
+                      className="user-link"
+                      title={getField(node, 'authorName', 'author_name')}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        const aid = Number(getField(node, 'authorId', 'author_id'))
+                        if (aid) navigate(`/profile/${aid}`)
+                      }}
+                    >
+                      {getField(node, 'authorAvatar', 'author_avatar') ? (
+                        <img className="user-link-avatar" src={getField(node, 'authorAvatar', 'author_avatar')} alt="" />
+                      ) : (
+                        <span className="user-link-avatar-fallback">
+                          {String(getField(node, 'authorName', 'author_name')).slice(0, 1).toUpperCase()}
+                        </span>
+                      )}
+                      {getField(node, 'authorName', 'author_name')}
+                    </button>
+                  )}
                   <span className={`page-vis-badge ${getField(node, 'visibility', 'visibility') === 'public' ? 'vis-public' : 'vis-private'}`}>
                     {getField(node, 'visibility', 'visibility') === 'public' ? '公开' : '私有'}
                   </span>

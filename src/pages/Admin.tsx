@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   fetchAdminStats,
   fetchAdminDocuments,
@@ -58,6 +59,7 @@ const ACTION_LABELS: Record<string, string> = {
 // 管理后台
 export default function Admin() {
   const t = useT()
+  const navigate = useNavigate()
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [docs, setDocs] = useState<AdminDocument[]>([])
   const [users, setUsers] = useState<AdminUser[]>([])
@@ -207,6 +209,7 @@ export default function Admin() {
                 <th>标题</th>
                 <th>类型</th>
                 <th>大小</th>
+                <th>上传者</th>
                 <th>更新时间</th>
                 <th>可见性</th>
                 <th>操作</th>
@@ -233,6 +236,15 @@ export default function Admin() {
                   </td>
                   <td><span className="doc-tag">{d.type}</span></td>
                   <td>{formatSize(d.size)}</td>
+                  <td className="cell-owner">
+                    {d.ownerName && d.ownerId ? (
+                      <button className="user-link" onClick={() => navigate(`/profile/${d.ownerId}`)} title={d.ownerName}>
+                        {d.ownerName}
+                      </button>
+                    ) : (
+                      '-'
+                    )}
+                  </td>
                   <td>{formatDate(d.updatedAt)}</td>
                   <td>
                     <span className={`visibility-badge ${d.visibility === 'public' ? 'public' : 'private'}`}>
@@ -253,7 +265,7 @@ export default function Admin() {
                 </tr>
               ))}
               {docs.length === 0 && (
-                <tr><td colSpan={6} className="empty-row">暂无文档</td></tr>
+                <tr><td colSpan={7} className="empty-row">暂无文档</td></tr>
               )}
             </tbody>
           </table>
@@ -277,12 +289,14 @@ export default function Admin() {
               {users.map((u) => (
                 <tr key={u.id}>
                   <td className="cell-user">
-                    {u.avatar ? (
-                      <img src={u.avatar} alt={u.username} className="row-avatar" />
-                    ) : (
-                      <span className="row-avatar-fallback">{u.username.slice(0, 1).toUpperCase()}</span>
-                    )}
-                    {u.username}
+                    <button className="user-link" onClick={() => navigate(`/profile/${u.id}`)} title={u.username}>
+                      {u.avatar ? (
+                        <img src={u.avatar} alt={u.username} className="row-avatar" />
+                      ) : (
+                        <span className="row-avatar-fallback">{u.username.slice(0, 1).toUpperCase()}</span>
+                      )}
+                      {u.username}
+                    </button>
                   </td>
                   <td>#{u.xuanjianId}</td>
                   <td><span className={`level-badge level-${u.level}`}>L{u.level}</span></td>

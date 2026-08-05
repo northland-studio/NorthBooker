@@ -148,8 +148,17 @@ export default function CoWorkPanel() {
           <div className="cowork-info-row">
             <span className="cowork-info-label">{t('cowork.author')}</span>
             <span className="cowork-info-value">
-              {page.author_avatar && <img className="page-editor-avatar" src={page.author_avatar} alt={page.author_name || ''} />}
-              {page.author_name || t('common.unknownUser')}
+              {page.author_name && page.author_id > 0 && (
+                <button
+                  className="user-link"
+                  title={page.author_name}
+                  onClick={() => navigate(`/profile/${page.author_id}`)}
+                >
+                  {page.author_avatar && <img className="user-link-avatar" src={page.author_avatar} alt="" />}
+                  {page.author_name}
+                </button>
+              )}
+              {!page.author_name && <span>{t('common.unknownUser')}</span>}
             </span>
           </div>
           <div className="cowork-info-row">

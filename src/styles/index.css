@@ -2630,6 +2630,19 @@ button {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  /* 作为可点击作者按钮 */
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  max-width: 120px;
+}
+
+.page-editor-author:hover {
+  color: var(--color-primary);
 }
 
 .page-editor-time {
@@ -5177,5 +5190,65 @@ body.dark .tts-reading-highlight {
     flex-direction: column;
     text-align: center;
   }
+}
+
+/* ===== 2.6.4：用户链接（跳转个人主页） ===== */
+.user-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color 0.15s;
+}
+.user-link:hover {
+  color: var(--color-primary);
+}
+.user-link-avatar,
+.user-link-avatar-fallback {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.user-link-avatar {
+  object-fit: cover;
+}
+.user-link-avatar-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-primary);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* 文档卡片上的上传者 */
+.doc-card-owner {
+  margin-top: 6px;
+  max-width: 100%;
+}
+
+/* 文件列表上传者列 */
+.doc-list-cell--owner {
+  flex: 1.2;
+  min-width: 120px;
+}
+
+/* 管理后台上传者单元格 */
+.cell-owner .user-link {
+  font-size: 13px;
+  max-width: 180px;
 }
 

@@ -1177,10 +1177,18 @@ export default function PageEditor() {
           返回
         </button>
         <div className="page-editor-info">
-          {authorAvatar && (
-            <img className="page-editor-avatar" src={authorAvatar} alt={authorName} />
+          {authorName && (
+            <button
+              className="page-editor-author user-link"
+              title={authorName}
+              onClick={() => {
+                if (authorId > 0) navigate(`/profile/${authorId}`)
+              }}
+            >
+              {authorAvatar && <img className="page-editor-avatar" src={authorAvatar} alt={authorName} />}
+              {authorName}
+            </button>
           )}
-          <span className="page-editor-author">{authorName}</span>
           {createdAt && (
             <span className="page-editor-time">创建于 {formatDate(createdAt)}</span>
           )}
