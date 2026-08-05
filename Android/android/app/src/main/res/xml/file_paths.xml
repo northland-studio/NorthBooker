@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FileProvider 共享路径：供 APK 安装（Download 目录）与 TTS 产物（cache/内部存储）使用 -->
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-path name="download" path="Download/" />
+    <files-path name="internal" path="." />
+    <cache-path name="cache" path="." />
+    <external-files-path name="external_files" path="." />
+</paths>
