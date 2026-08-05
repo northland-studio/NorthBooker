@@ -483,6 +483,9 @@ export default function PageEditor() {
   // 协作资格状态：init=判断中 / skipped=不启用协作 / ready=已创建 provider
   const [collabStatus, setCollabStatus] = useState<'init' | 'skipped' | 'ready'>('init')
   const pageContentRef = useRef('')
+  // 初始内容同步标记：seedPending=sync 早于 fetch 完成，待 fetch 后补写；seedDone=初始内容已同步，之前禁止自动保存（防止空内容覆盖数据库）
+  const seedPendingRef = useRef(false)
+  const seedDoneRef = useRef(false)
 
   // 更新目录（编辑时 + 加载内容后都要调用，只读文档也能用目录）
   const updateToc = (ed: any) => {
@@ -572,6 +575,7 @@ export default function PageEditor() {
   const doSave = useCallback(async () => {
     if (!id || !canEdit || !editor) return
     if (comparingRef.current) return // 对比模式不保存
+    if (!seedDoneRef.current) return // 初始内容同步完成前不保存，避免空内容覆盖数据库
     setSaving(true)
     try {
       await updatePage(id, {
@@ -597,7 +601,7 @@ export default function PageEditor() {
       }
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault()
-        if (id && canEdit && editor) {
+        if (id && canEdit && editor && seedDoneRef.current) {
           clearTimeout(saveTimer.current)
           setSaving(true)
           updatePage(id, {
@@ -628,6 +632,11 @@ export default function PageEditor() {
         setCreatedAt(page.createdAt ?? page.created_at)
         setUpdatedAt(page.updatedAt ?? page.updated_at)
         pageContentRef.current = page.content || ''
+        // 若 sync 事件早于 fetch 完成触发（当时 ref 为空），在此补写初始内容
+        if (seedPendingRef.current) {
+          seedPendingRef.current = false
+          trySeedContent()
+        }
         // 启用实时协作：公开文档或作者本人（登录用户）；Y.Doc 始终存在，仅连接房间
         const canCollab = !!user && (page.visibility === 'public' || page.authorId === user.id || page.author_id === user.id)
         if (canCollab && !providerRef.current) {
@@ -637,7 +646,13 @@ export default function PageEditor() {
             providerRef.current = provider
             // 房间内容同步完成后，若 Yjs 文档为空才写入初始 HTML（避免覆盖他人实时内容）
             provider.on('sync', (synced: boolean) => {
-              if (synced) trySeedContent()
+              if (!synced) return
+              if (!pageContentRef.current) {
+                // fetch 尚未完成：标记待补写，fetch 完成后重新尝试
+                seedPendingRef.current = true
+                return
+              }
+              trySeedContent()
             })
             setCollabStatus('ready')
           } catch {
@@ -660,12 +675,14 @@ export default function PageEditor() {
   // 初始内容同步：仅当 Yjs 文档为空时写入初始 HTML；
   // 协作模式（ready）等 provider sync 后再判断，非协作（skipped）直接写入
   const trySeedContent = useCallback(() => {
-    if (!editor || !pageContentRef.current) return
+    if (!editor) return
     const frag = ydocRef.current!.getXmlFragment('default')
-    if (frag.length === 0) {
+    if (frag.length === 0 && pageContentRef.current) {
       editor.commands.setContent(pageContentRef.current)
       pageContentRef.current = ''
     }
+    // 无论是否写入（Yjs 房间已有内容视为已同步），标记完成，解锁自动保存
+    seedDoneRef.current = true
   }, [editor])
 
   useEffect(() => {
