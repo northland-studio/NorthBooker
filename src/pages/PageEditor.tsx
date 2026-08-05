@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useEditor, EditorContent } from '@tiptap/react'
 import { Extension } from '@tiptap/core'
-import { Plugin, PluginKey } from '@tiptap/pm/state'
+import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -18,7 +18,10 @@ import { TableRow } from '@tiptap/extension-table-row'
 import { TableCell } from '@tiptap/extension-table-cell'
 import { TableHeader } from '@tiptap/extension-table-header'
 import { fetchPage, updatePage, fetchPageVersions, restorePageVersion } from '@/api/pages'
+import { fetchSubscriptions, subscribe, unsubscribe } from '@/api/subscriptions'
+import { fetchAnnotations, addAnnotation, deleteAnnotation, type Annotation } from '@/api/annotations'
 import { useAuthStore } from '@/store/auth'
+import { isAdmin } from '@/types/user'
 import { useThemeStore } from '@/store/theme'
 import { formatDate } from '@/utils/fileType'
 import DocSearch from '@/components/DocSearch'
@@ -239,7 +242,12 @@ const ttsHighlightExtension = Extension.create({
 })
 
 // ===== 版本对比高亮 Decoration 插件（模块级状态，类 TTS 朗读高亮） =====
-let diffHighlightRanges: { from: number; to: number; type: 'add' | 'mod' }[] = []
+// 新增（绿）/ 修改（黄）用 inline decoration；被删去的内容以红色删除线 widget 加载进正文
+// widget 分两类：inline（修改行内的被删片段，紧贴新内容前）与 block（整段被删的段落）
+let diffHighlightData: {
+  ranges: { from: number; to: number; type: 'add' | 'mod' }[]
+  widgets: { pos: number; text: string; inline: boolean }[]
+} = { ranges: [], widgets: [] }
 
 const diffHighlightPlugin = new Plugin({
   key: new PluginKey('diffHighlight'),
@@ -247,9 +255,9 @@ const diffHighlightPlugin = new Plugin({
     init: () => DecorationSet.empty,
     apply(tr, set) {
       if (tr.getMeta('diffHighlight') !== undefined) {
-        if (!diffHighlightRanges.length) return DecorationSet.empty
+        if (!diffHighlightData.ranges.length && !diffHighlightData.widgets.length) return DecorationSet.empty
         const decos: Decoration[] = []
-        for (const r of diffHighlightRanges) {
+        for (const r of diffHighlightData.ranges) {
           tr.doc.nodesBetween(r.from, r.to, (node: any, pos: number) => {
             if (!node.isText) return true
             const nFrom = Math.max(r.from, pos)
@@ -259,6 +267,16 @@ const diffHighlightPlugin = new Plugin({
             }
             return true
           })
+        }
+        for (const w of diffHighlightData.widgets) {
+          decos.push(
+            Decoration.widget(w.pos, () => {
+              const el = document.createElement(w.inline ? 'span' : 'div')
+              el.className = w.inline ? 'vdl-del-inline' : 'vdl-del-widget'
+              el.textContent = w.text
+              return el
+            }, { side: -1 }),
+          )
         }
         return DecorationSet.create(tr.doc, decos)
       }
@@ -279,27 +297,95 @@ const diffHighlightExtension = Extension.create({
   },
 })
 
-// 将 cur 侧 diff 行（add/mod）映射到文档块级 pos 范围（用于正文内高亮）
-function mapDiffToPositions(doc: any, curLines: DiffLine[]): { from: number; to: number; type: 'add' | 'mod' }[] {
+// 将 diff 行映射到文档：
+// - 新增行 → 整行绿色 inline 高亮
+// - 修改行 → 黄色高亮新内容；行内被删去的片段以红色删除线 inline widget 加载到新内容前
+// - 删除行 → 整段以红色删除线 block widget 加载到对应位置（非独立 diff 视图）
+function mapDiffToDoc(doc: any, lines: DiffLine[]) {
   const ranges: { from: number; to: number; type: 'add' | 'mod' }[] = []
+  const widgets: { pos: number; text: string; inline: boolean }[] = []
   let i = 0
+  let pendingDels: string[] = []
+  const flushDels = (pos: number) => {
+    if (!pendingDels.length) return
+    widgets.push({ pos, text: pendingDels.join('\n'), inline: false })
+    pendingDels = []
+  }
   doc.descendants((node: any, pos: number) => {
     if (node.isBlock && node.textContent) {
       const text = node.textContent.replace(/\u00a0/g, ' ')
-      const line = curLines[i]
+      const line = lines[i]
       if (line && line.text.trim() === text.trim()) {
-        if (line.type === 'add' || line.type === 'mod') {
-          const from = pos + 1
-          const to = pos + node.nodeSize - 1
-          if (to > from) ranges.push({ from, to, type: line.type })
+        if (line.type === 'del') {
+          pendingDels.push(line.text)
+        } else {
+          flushDels(pos + 1)
+          if (line.type === 'add' || line.type === 'mod') {
+            const from = pos + 1
+            const to = pos + node.nodeSize - 1
+            if (to > from) {
+              ranges.push({ from, to, type: line.type })
+              // 修改行：把被删去的片段（红色删除线）加载到修改内容前
+              if (line.type === 'mod' && line.segments) {
+                const delText = line.segments.filter((s) => s.type === 'del').map((s) => s.text).join('')
+                if (delText) widgets.push({ pos: from, text: delText, inline: true })
+              }
+            }
+          }
         }
         i++
       }
     }
     return true
   })
-  return ranges
+  // 文档末尾仍残留的删除内容 → 追加到末尾
+  if (pendingDels.length) {
+    flushDels(doc.content.size)
+  }
+  return { ranges, widgets }
 }
+
+// ===== 片段批注高亮 Decoration 插件（仅在线文档） =====
+// 有批注的文本片段以黄色波浪下划线标记；点击批注可跳转到对应位置
+let annotationHighlightData: { from: number; to: number; id: number }[] = []
+
+const annotationHighlightPlugin = new Plugin({
+  key: new PluginKey('annotationHighlight'),
+  state: {
+    init: () => DecorationSet.empty,
+    apply(tr, set) {
+      if (tr.getMeta('annotationHighlight') !== undefined) {
+        if (!annotationHighlightData.length) return DecorationSet.empty
+        const decos: Decoration[] = []
+        for (const r of annotationHighlightData) {
+          tr.doc.nodesBetween(r.from, r.to, (node: any, pos: number) => {
+            if (!node.isText) return true
+            const nFrom = Math.max(r.from, pos)
+            const nTo = Math.min(r.to, pos + node.nodeSize)
+            if (nTo > nFrom) {
+              decos.push(Decoration.inline(nFrom, nTo, { class: 'ann-mark', 'data-ann-id': String(r.id) }))
+            }
+            return true
+          })
+        }
+        return DecorationSet.create(tr.doc, decos)
+      }
+      return set.map(tr.mapping, tr.doc)
+    },
+  },
+  props: {
+    decorations(state) {
+      return this.getState(state)
+    },
+  },
+})
+
+const annotationHighlightExtension = Extension.create({
+  name: 'annotationHighlight',
+  addProseMirrorPlugins() {
+    return [annotationHighlightPlugin]
+  },
+})
 
 // 在线文档编辑器
 export default function PageEditor() {
@@ -325,6 +411,29 @@ export default function PageEditor() {
   const [showShare, setShowShare] = useState(false)
   const [showComments, setShowComments] = useState(false)
   const [showVersions, setShowVersions] = useState(false)
+  // 订阅（仅在线文档）+ 片段批注（2.6.0）
+  const [subscribed, setSubscribed] = useState(false)
+  const [showAnnotations, setShowAnnotations] = useState(false)
+  const [annotations, setAnnotations] = useState<Annotation[]>([])
+  const [annInput, setAnnInput] = useState('')
+  // 写作统计（2.6.0）：本次写作字数 / 今日写作字数 / 快捷键帮助
+  const [writeStats, setWriteStats] = useState({ session: 0, today: 0 })
+  const writeStatsRef = useRef({ session: 0, today: 0 })
+  const lastCharRef = useRef(0)
+  const [showShortcuts, setShowShortcuts] = useState(false)
+  const loadTodayStats = () => {
+    try {
+      const key = `northbooker-write-${new Date().toISOString().slice(0, 10)}`
+      const saved = JSON.parse(localStorage.getItem(key) || 'null')
+      writeStatsRef.current.today = saved?.count || 0
+    } catch { writeStatsRef.current.today = 0 }
+  }
+  const saveTodayStats = () => {
+    try {
+      const key = `northbooker-write-${new Date().toISOString().slice(0, 10)}`
+      localStorage.setItem(key, JSON.stringify({ count: writeStatsRef.current.today }))
+    } catch { /* ignore */ }
+  }
   const [versions, setVersions] = useState<PageVersion[]>([])
   const [versionsLoading, setVersionsLoading] = useState(false)
   const [restoreConfirmId, setRestoreConfirmId] = useState<number | null>(null)
@@ -396,11 +505,21 @@ export default function PageEditor() {
       TableHeader,
       ttsHighlightExtension,
       diffHighlightExtension,
+      annotationHighlightExtension,
     ],
     onUpdate: ({ editor: ed }) => {
       scheduleSave()
-      // 统计字数（去空白字符）
-      setCharCount(ed.state.doc.textContent.replace(/\s/g, '').length)
+      // 统计字数（去空白字符）+ 写作统计
+      const newCount = ed.state.doc.textContent.replace(/\s/g, '').length
+      setCharCount(newCount)
+      const delta = newCount - lastCharRef.current
+      lastCharRef.current = newCount
+      if (delta > 0) {
+        writeStatsRef.current.session += delta
+        writeStatsRef.current.today += delta
+        saveTodayStats()
+        setWriteStats({ ...writeStatsRef.current })
+      }
       // 更新目录
       updateToc(ed)
     },
@@ -453,9 +572,14 @@ export default function PageEditor() {
   }, [id, editor, canEdit])
   doSaveRef.current = doSave
 
-  // Ctrl+S 手动保存
+  // Ctrl+S 手动保存 + Ctrl+/ 快捷键帮助
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === '/') {
+        e.preventDefault()
+        setShowShortcuts((v) => !v)
+        return
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault()
         if (id && canEdit && editor) {
@@ -490,9 +614,13 @@ export default function PageEditor() {
         setUpdatedAt(page.updatedAt ?? page.updated_at)
         if (editor) {
           editor.commands.setContent(page.content || '')
-          setCharCount(editor.state.doc.textContent.replace(/\s/g, '').length)
+          const count = editor.state.doc.textContent.replace(/\s/g, '').length
+          setCharCount(count)
+          lastCharRef.current = count
           updateToc(editor)
         }
+        loadTodayStats()
+        setWriteStats({ ...writeStatsRef.current })
         setLoading(false)
       })
       .catch(() => {
@@ -514,6 +642,96 @@ export default function PageEditor() {
     } catch {
       setVisibility(visibility)
     }
+  }
+
+  // 订阅（仅在线文档）：加载订阅状态
+  useEffect(() => {
+    if (!id || !user) return
+    fetchSubscriptions()
+      .then((list) => {
+        const hit = (list || []).find((s: any) => s.target_type === 'page' && s.target_id === id)
+        setSubscribed(!!hit)
+      })
+      .catch(() => setSubscribed(false))
+  }, [id, user])
+
+  const toggleSubscribe = async () => {
+    if (!id || !user) return
+    try {
+      if (subscribed) {
+        await unsubscribe('page', id)
+        setSubscribed(false)
+      } else {
+        await subscribe('page', id)
+        setSubscribed(true)
+      }
+    } catch {
+      alert('订阅操作失败')
+    }
+  }
+
+  // 片段批注：加载 + 刷新正文高亮
+  const applyAnnotationMarks = useCallback(() => {
+    if (!editor) return
+    annotationHighlightData = annotations.map((a) => ({ from: a.start_pos, to: a.end_pos, id: a.id }))
+    editor.view.dispatch(editor.state.tr.setMeta('annotationHighlight', true))
+  }, [editor, annotations])
+
+  useEffect(() => { applyAnnotationMarks() }, [applyAnnotationMarks])
+
+  const loadAnnotations = useCallback(async () => {
+    if (!id) return
+    try {
+      const list = await fetchAnnotations(id)
+      setAnnotations(list || [])
+    } catch { setAnnotations([]) }
+  }, [id])
+
+  useEffect(() => { loadAnnotations() }, [loadAnnotations])
+
+  // 从当前选区创建批注
+  const handleAddAnnotation = async () => {
+    if (!editor || !id || !user) return
+    const { from, to } = editor.state.selection
+    if (to <= from) {
+      alert('请先选中要批注的文本片段')
+      return
+    }
+    const text = editor.state.doc.textBetween(from, to, ' ').trim()
+    if (!text) { alert('选中的片段没有文字'); return }
+    const content = annInput.trim()
+    if (!content) { alert('请输入批注内容'); return }
+    try {
+      await addAnnotation(id, { start_pos: from, end_pos: to, text: text.slice(0, 500), content: content.slice(0, 2000) })
+      setAnnInput('')
+      await loadAnnotations()
+    } catch {
+      alert('添加批注失败')
+    }
+  }
+
+  const handleDeleteAnnotation = async (ann: Annotation) => {
+    if (!confirm('删除这条批注？')) return
+    try {
+      await deleteAnnotation(ann.id)
+      await loadAnnotations()
+    } catch {
+      alert('删除批注失败')
+    }
+  }
+
+  // 点击批注跳转到正文对应位置
+  const scrollToAnnotation = (ann: Annotation) => {
+    if (!editor) return
+    const { view } = editor
+    const coords = view.coordsAtPos(ann.start_pos)
+    const container = view.dom.parentElement
+    if (container) {
+      const rect = container.getBoundingClientRect()
+      container.scrollTop += coords.top - rect.top - 100
+    }
+    view.dispatch(view.state.tr.setSelection(TextSelection.near(view.state.doc.resolve(ann.start_pos))))
+    view.focus()
   }
 
   const loadVersions = async () => {
@@ -577,12 +795,12 @@ export default function PageEditor() {
       }
     }
     setDiffStats({ add, del })
-    // 临时替换正文为该版本内容，并在正文内以 Decoration 高亮差异（类 TTS 朗读高亮）
+    // 临时替换正文为该版本内容，正文内高亮差异：新增绿 / 修改黄；
+    // 被删去的内容以红色删除线 widget 插入到对应位置（非独立 diff 视图）
     if (diffBaseHtmlRef.current === null) diffBaseHtmlRef.current = editor.getHTML()
     comparingRef.current = true
     editor.commands.setContent(v.content || '')
-    const curLines = lines.filter((l) => l.type !== 'del')
-    diffHighlightRanges = mapDiffToPositions(editor.state.doc, curLines)
+    diffHighlightData = mapDiffToDoc(editor.state.doc, lines)
     editor.view.dispatch(editor.state.tr.setMeta('diffHighlight', true))
     editor.setEditable(false)
     setComparingVersion(v)
@@ -593,7 +811,7 @@ export default function PageEditor() {
   const exitCompare = () => {
     if (!editor) return
     comparingRef.current = false
-    diffHighlightRanges = []
+    diffHighlightData = { ranges: [], widgets: [] }
     editor.view.dispatch(editor.state.tr.setMeta('diffHighlight', true))
     if (diffBaseHtmlRef.current !== null) {
       editor.commands.setContent(diffBaseHtmlRef.current)
@@ -934,6 +1152,68 @@ export default function PageEditor() {
         />
       )}
 
+      {/* 片段批注面板（仅在线文档） */}
+      {id && (
+        <div className={`comment-panel annotation-panel ${showAnnotations ? 'comment-panel--open' : ''}`}>
+          <div className="comment-panel-header">
+            <h3>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M16 3h5v5" /><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3" />
+                <path d="M3 21l6-6" /><path d="M21 3l-8 8" />
+              </svg>
+              片段批注
+            </h3>
+            <button className="comment-panel-close" onClick={() => setShowAnnotations(false)} aria-label="关闭">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
+          <div className="comment-panel-body">
+            {user && (
+              <div className="ann-compose">
+                <textarea
+                  className="ann-input"
+                  placeholder="先在正文中选中一段文字，再输入批注内容…"
+                  value={annInput}
+                  onChange={(e) => setAnnInput(e.target.value)}
+                  rows={3}
+                />
+                <button className="ann-submit" onClick={handleAddAnnotation}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <line x1="22" y1="2" x2="11" y2="13" />
+                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+                  </svg>
+                  添加批注（选中片段）
+                </button>
+              </div>
+            )}
+            <div className="ann-list">
+              {annotations.length === 0 ? (
+                <div className="comment-empty">暂无批注</div>
+              ) : (
+                annotations.map((a) => (
+                  <div key={a.id} className="ann-item">
+                    <div className="ann-item-text" onClick={() => scrollToAnnotation(a)} title="点击跳转到原文">
+                      「{a.text}」
+                    </div>
+                    <div className="ann-item-content">{a.content}</div>
+                    <div className="ann-item-meta">
+                      <span>{a.username || '未知用户'}</span>
+                      <span>{formatDate(a.created_at)}</span>
+                      {user && (a.user_id === user.id || isAdmin(user)) && (
+                        <button className="link-btn danger" onClick={() => handleDeleteAnnotation(a)}>删除</button>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 版本历史面板 */}
       {showVersions && <div className="comment-overlay" onClick={() => { setShowVersions(false); setRestoreConfirmId(null); setComparingVersion(null) }} />}
       <div className={`comment-panel version-panel ${showVersions ? 'comment-panel--open' : ''}`}>
@@ -1010,6 +1290,43 @@ export default function PageEditor() {
       </div>
 
       {showShare && id && <ShareDialog docId={id} onClose={() => setShowShare(false)} />}
+
+      {/* 快捷键帮助 */}
+      {showShortcuts && (
+        <div className="dialog-mask" onClick={() => setShowShortcuts(false)}>
+          <div className="dialog-card shortcuts-card" onClick={(e) => e.stopPropagation()}>
+            <div className="dialog-header">
+              <h3>键盘快捷键</h3>
+              <button className="dialog-close" onClick={() => setShowShortcuts(false)} aria-label="关闭">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+            <div className="shortcuts-grid">
+              {[
+                ['Ctrl / ⌘ + S', '手动保存'],
+                ['Ctrl / ⌘ + B', '加粗'],
+                ['Ctrl / ⌘ + I', '斜体'],
+                ['Ctrl / ⌘ + U', '下划线'],
+                ['Ctrl / ⌘ + K', '插入链接'],
+                ['Ctrl / ⌘ + Z', '撤销'],
+                ['Ctrl / ⌘ + Shift + Z', '重做'],
+                ['Ctrl / ⌘ + Alt + 1/2/3', '标题 1/2/3'],
+                ['Ctrl / ⌘ + Shift + 7', '无序列表'],
+                ['Ctrl / ⌘ + Shift + 8', '有序列表'],
+                ['Ctrl / ⌘ + /', '快捷键帮助'],
+                ['Ctrl / ⌘ + Enter', '发表评论'],
+              ].map(([key, desc]) => (
+                <div key={key} className="shortcuts-item">
+                  <kbd className="shortcuts-key">{key}</kbd>
+                  <span>{desc}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* TTS 合成进度悬浮球（仅桌面应用版）：可拖动 + 点击展开/收起 */}
       {isApp && ttsPools.length > 0 && (
@@ -1186,6 +1503,13 @@ export default function PageEditor() {
           )}
         </div>
         <div className="pe-bottom-group pe-bottom-center">
+          {!comparingVersion && (
+            <span className="pe-write-stats" title="本次写作字数 / 今日写作字数">
+              <span className="pe-write-stat pe-write-stat--session">本次 +{writeStats.session} 字</span>
+              <span className="pe-write-stat">今日 {writeStats.today} 字</span>
+              <span className="pe-write-stat pe-write-stat--total">全文 {charCount} 字</span>
+            </span>
+          )}
           {comparingVersion && (
             <span className="pe-bottom-diff-info">
               <strong>版本 {versions.length - versions.findIndex((x) => x.id === comparingVersion.id)}</strong>
@@ -1197,6 +1521,30 @@ export default function PageEditor() {
           )}
         </div>
         <div className="pe-bottom-group pe-bottom-right">
+          {user && (
+            <button
+              className={`pe-share-btn ${subscribed ? 'pe-btn--active pe-sub-active' : ''}`}
+              onClick={toggleSubscribe}
+              title={subscribed ? '取消订阅（更新后邮件通知）' : '订阅更新（更新后邮件通知）'}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              </svg>
+            </button>
+          )}
+          <button
+            className={`pe-share-btn ${showAnnotations ? 'pe-btn--active' : ''}`}
+            onClick={() => setShowAnnotations(!showAnnotations)}
+            title="片段批注"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="9" y1="13" x2="15" y2="13" />
+              <line x1="12" y1="10" x2="12" y2="16" />
+            </svg>
+          </button>
           {id && (
             <button
               className={`pe-share-btn ${showComments ? 'pe-btn--active' : ''}`}
