@@ -38,7 +38,7 @@ app.use((req, res, next) => {
 
 // 中间件
 app.use(cors())
-app.use(express.json())
+app.use(express.json({ limit: '10mb' }))
 app.use(cookieParser(process.env.JWT_SECRET || 'change_me'))
 
 // 路由（文件存储使用七牛对象存储，不再本地静态托管）

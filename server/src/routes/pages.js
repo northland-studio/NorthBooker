@@ -10,6 +10,16 @@ function generateId() {
   return crypto.randomBytes(12).toString('base64url')
 }
 
+// 每个页面最多保留 5 条版本历史，超出删除最旧的
+function pruneVersions(pageId, limit = 5) {
+  db.prepare(
+    `DELETE FROM page_versions
+     WHERE page_id = ? AND id NOT IN (
+       SELECT id FROM page_versions WHERE page_id = ? ORDER BY created_at DESC, id DESC LIMIT ?
+     )`,
+  ).run(pageId, pageId, limit)
+}
+
 function buildTree(rows) {
   const map = new Map()
   const roots = []
@@ -98,6 +108,7 @@ router.post('/:id/versions/:versionId/restore', authMiddleware, (req, res) => {
   // Save current state as a version (rollback snapshot)
   db.prepare('INSERT INTO page_versions (page_id, title, content, author_id, is_rollback) VALUES (?, ?, ?, ?, 1)')
     .run(req.params.id, page.title, page.content, req.user?.id)
+  pruneVersions(req.params.id)
 
   // Restore content
   db.prepare('UPDATE pages SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
@@ -154,6 +165,7 @@ router.put('/:id', authMiddleware, (req, res) => {
   if (current) {
     db.prepare('INSERT INTO page_versions (page_id, title, content, author_id, created_at) VALUES (?, ?, ?, ?, ?)')
       .run(req.params.id, current.title, current.content, current.author_id, new Date().toISOString())
+    pruneVersions(req.params.id)
   }
 
   const { title, content, parentId, visibility } = req.body

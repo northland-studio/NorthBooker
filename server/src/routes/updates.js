@@ -97,6 +97,31 @@ router.get('/files/:key', (req, res) => {
 })
 
 /**
+ * GET /api/updates/android/latest.json
+ * 返回 Android 版更新元数据（从七牛 releases/android/latest.json 读取）
+ */
+router.get('/android/latest.json', (_req, res) => {
+  try {
+    const signedUrl = signUrl('releases/android/latest.json', 60) + '&_t=' + Date.now()
+    https.get(signedUrl, { headers: { 'Cache-Control': 'no-cache' } }, (qiniuRes) => {
+      const chunks = []
+      qiniuRes.on('data', (c) => chunks.push(c))
+      qiniuRes.on('end', () => {
+        if (qiniuRes.statusCode === 200) {
+          res.set('Content-Type', 'application/json; charset=utf-8')
+          res.set('Cache-Control', 'no-cache')
+          res.send(Buffer.concat(chunks))
+        } else {
+          res.status(404).json({ error: 'android update meta not found' })
+        }
+      })
+    }).on('error', () => res.status(502).json({ error: 'unavailable' }))
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+/**
  * GET /api/updates/release-notes.json
  * 返回最新版本的更新公告
  */
