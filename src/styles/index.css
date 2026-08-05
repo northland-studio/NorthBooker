@@ -4289,3 +4289,201 @@ body.dark .tts-reading-highlight {
   }
 }
 
+/* ===== 在线文档编辑器底部栏 ===== */
+.page-editor-page {
+  padding-bottom: 50px;
+}
+
+.page-editor-bottom-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 16px;
+  min-height: 50px;
+  background: var(--color-bg);
+  border-top: 1px solid var(--color-border);
+  z-index: 30;
+}
+
+.pe-bottom-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pe-bottom-left {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+}
+
+.pe-bottom-center {
+  flex-shrink: 0;
+}
+
+.pe-bottom-right {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.page-editor-bottom-bar .viewer-back {
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.pe-bottom-diff-info {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.pe-bottom-diff-info strong {
+  color: var(--color-text);
+  margin: 0 2px;
+}
+
+.diff-stat {
+  font-weight: 600;
+  margin-left: 6px;
+}
+
+.diff-stat--add {
+  color: #16a34a;
+}
+
+.diff-stat--del {
+  color: #dc2626;
+}
+
+/* ===== 版本对比 ===== */
+.version-compare-btn {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.version-compare-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.version-actions {
+  gap: 6px;
+}
+
+.version-diff-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.version-diff-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.version-diff-back {
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.version-diff-back:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.version-diff-body {
+  max-height: 60vh;
+  overflow: auto;
+  padding: 8px 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.8;
+}
+
+.version-diff-line {
+  display: flex;
+  gap: 6px;
+  padding: 1px 8px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.version-diff-marker {
+  flex-shrink: 0;
+  width: 16px;
+  text-align: center;
+  color: var(--color-text-muted);
+  user-select: none;
+}
+
+.version-diff-same {
+  color: var(--color-text-muted);
+}
+
+.version-diff-add {
+  background: rgba(22, 163, 74, 0.12);
+  color: var(--color-text);
+}
+
+.version-diff-add .version-diff-marker {
+  color: #16a34a;
+  font-weight: 700;
+}
+
+.version-diff-del {
+  background: rgba(220, 38, 38, 0.12);
+  color: var(--color-text);
+}
+
+.version-diff-del .version-diff-marker {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+.version-diff-mod {
+  background: rgba(234, 179, 8, 0.16);
+  color: var(--color-text);
+}
+
+.version-diff-mod .version-diff-marker {
+  color: #eab308;
+  font-weight: 700;
+}
+
+.vdl-old {
+  color: #dc2626;
+  text-decoration: line-through;
+}
+
+.vdl-arrow {
+  color: #eab308;
+}
+
+.vdl-new {
+  color: #16a34a;
+  font-weight: 600;
+}
+

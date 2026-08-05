@@ -64,6 +64,71 @@ function splitTextSegments(text: string): { text: string; start: number }[] {
   return segments.filter((s) => s.text.length > 0)
 }
 
+// ===== 版本对比工具（HTML → 纯文本 → 行级 LCS diff） =====
+type DiffLineType = 'same' | 'add' | 'del' | 'mod'
+interface DiffLine { type: DiffLineType; text: string; replace?: string }
+
+// HTML 转纯文本（去除标签，保留换行）
+function htmlToText(html: string): string {
+  const tmp = document.createElement('div')
+  tmp.innerHTML = html || ''
+  return (tmp.textContent || '').replace(/\u00a0/g, ' ')
+}
+
+// 行级 LCS diff：返回带类型标注的行；相邻且数量相等的 del+add 块合并为 mod（修改）
+function diffTextLines(oldText: string, newText: string): DiffLine[] {
+  const a = oldText.split('\n').filter((l) => l.trim() !== '')
+  const b = newText.split('\n').filter((l) => l.trim() !== '')
+  const n = a.length
+  const m = b.length
+  const dp: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0))
+  for (let i = n - 1; i >= 0; i--) {
+    for (let j = m - 1; j >= 0; j--) {
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1])
+    }
+  }
+  const out: DiffLine[] = []
+  let i = 0
+  let j = 0
+  while (i < n && j < m) {
+    if (a[i] === b[j]) {
+      out.push({ type: 'same', text: a[i] })
+      i++
+      j++
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      out.push({ type: 'del', text: a[i] })
+      i++
+    } else {
+      out.push({ type: 'add', text: b[j] })
+      j++
+    }
+  }
+  while (i < n) { out.push({ type: 'del', text: a[i] }); i++ }
+  while (j < m) { out.push({ type: 'add', text: b[j] }); j++ }
+
+  // 相邻 del+add 块数量相等 → 合并为 mod（修改）
+  const merged: DiffLine[] = []
+  for (let k = 0; k < out.length; k++) {
+    const cur = out[k]
+    if ((cur.type === 'del' || cur.type === 'add') && k + 1 < out.length) {
+      const blockDel: string[] = []
+      const blockAdd: string[] = []
+      let t = k
+      while (t < out.length && out[t].type === 'del') { blockDel.push(out[t].text); t++ }
+      while (t < out.length && out[t].type === 'add') { blockAdd.push(out[t].text); t++ }
+      if (blockDel.length > 0 && blockAdd.length > 0 && blockDel.length === blockAdd.length) {
+        for (let x = 0; x < blockDel.length; x++) {
+          merged.push({ type: 'mod', text: blockDel[x], replace: blockAdd[x] })
+        }
+        k = t - 1
+        continue
+      }
+    }
+    merged.push(cur)
+  }
+  return merged
+}
+
 // 判断文本是否含足够中文（与主进程 hasChinese 一致）
 function hasChineseText(text: string): boolean {
   const zh = (text.match(/[\u4e00-\u9fff]/g) || []).length
@@ -176,6 +241,10 @@ export default function PageEditor() {
   const [versions, setVersions] = useState<PageVersion[]>([])
   const [versionsLoading, setVersionsLoading] = useState(false)
   const [restoreConfirmId, setRestoreConfirmId] = useState<number | null>(null)
+  // 版本对比（查看对比时展示 diff 高亮 + 底部栏统计）
+  const [comparingVersion, setComparingVersion] = useState<PageVersion | null>(null)
+  const [diffLines, setDiffLines] = useState<DiffLine[]>([])
+  const [diffStats, setDiffStats] = useState({ add: 0, del: 0 })
   const [ttsStatus, setTtsStatus] = useState<'idle' | 'synthesizing' | 'playing'>('idle')
   const [ttsProgress, setTtsProgress] = useState(0)
   const [ttsTotal, setTtsTotal] = useState(0)
@@ -243,12 +312,10 @@ export default function PageEditor() {
     },
   })
 
-  // 判断是否有编辑权限
+  // 判断是否有编辑权限（仅作者本人可编辑，管理员也不能修改用户的在线文档）
   const canEdit = useMemo(() => {
     if (!user) return false
-    if ((user.level ?? 0) >= 1) return true
-    if (authorId > 0 && user.id === authorId) return true
-    return false
+    return authorId > 0 && user.id === authorId
   }, [user, authorId])
 
   // 非编辑者禁止编辑 ProseMirror
@@ -385,6 +452,27 @@ export default function PageEditor() {
     } finally {
       setSaving(false)
     }
+  }
+
+  // 版本对比：版本内容（旧）与当前编辑器内容（新）做行级 diff
+  const handleCompare = (v: PageVersion) => {
+    if (!editor) return
+    const current = htmlToText(editor.getHTML())
+    const target = htmlToText(v.content || '')
+    const lines = diffTextLines(target, current)
+    setDiffLines(lines)
+    let add = 0
+    let del = 0
+    for (const l of lines) {
+      if (l.type === 'add') add += l.text.length
+      else if (l.type === 'del') del += l.text.length
+      else if (l.type === 'mod') {
+        add += (l.replace || '').length
+        del += l.text.length
+      }
+    }
+    setDiffStats({ add, del })
+    setComparingVersion(v)
   }
 
   const handleShare = () => {
@@ -607,13 +695,6 @@ export default function PageEditor() {
   return (
     <div className="page-editor-page">
       <div className="page-editor-toolbar">
-        <button className="viewer-back" onClick={() => navigate('/pages')} aria-label="返回">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="19" y1="12" x2="5" y2="12" />
-            <polyline points="12 19 5 12 12 5" />
-          </svg>
-          返回
-        </button>
         <div className="page-editor-info">
           {authorAvatar && (
             <img className="page-editor-avatar" src={authorAvatar} alt={authorName} />
@@ -630,121 +711,7 @@ export default function PageEditor() {
             </svg>
             {charCount} 字
           </span>
-          <button className={`pe-share-btn ${copied ? 'pe-share-btn--copied' : ''}`} onClick={handleShare} title="复制链接">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              {copied ? (
-                <polyline points="20 6 9 17 4 12" />
-              ) : (
-                <>
-                  <circle cx="18" cy="5" r="3" />
-                  <circle cx="6" cy="12" r="3" />
-                  <circle cx="18" cy="19" r="3" />
-                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
-                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
-                </>
-              )}
-            </svg>
-          </button>
-          <button
-            className="pe-share-btn"
-            onClick={() => setShowShare(true)}
-            title="生成分享链接"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="7 10 12 15 17 10" />
-              <line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-          </button>
-          <button
-            className={`pe-share-btn ${showSearch ? 'pe-btn--active' : ''}`}
-            onClick={() => setShowSearch(!showSearch)}
-            title="搜索"
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="11" cy="11" r="8" />
-              <line x1="21" y1="21" x2="16.65" y2="16.65" />
-            </svg>
-          </button>
-          {saving && <span className="page-editor-saving">保存中...</span>}
         </div>
-
-        {/* TTS 朗读按钮（仅应用版可见） */}
-        {isApp && ttsEnabled && (
-          <button
-            className={`pe-btn ${ttsStatus !== 'idle' ? 'pe-btn--active' : ''}`}
-            onClick={handleTTS}
-            title={ttsStatus === 'synthesizing' ? `合成中 ${ttsProgress}/${ttsTotal}` : ttsStatus === 'playing' ? '停止朗读' : '朗读文档'}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              {ttsStatus !== 'idle' ? (
-                <>
-                  <rect x="6" y="4" width="4" height="16" />
-                  <rect x="14" y="4" width="4" height="16" />
-                </>
-              ) : (
-                <>
-                  <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
-                  <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
-                  <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
-                </>
-              )}
-            </svg>
-          </button>
-        )}
-
-        {/* 版本历史按钮 */}
-        <button
-          className={`pe-btn ${showVersions ? 'pe-btn--active' : ''}`}
-          onClick={() => {
-            if (!showVersions) loadVersions()
-            setShowVersions(!showVersions)
-          }}
-          title="版本历史"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <circle cx="12" cy="12" r="10" />
-            <polyline points="12 6 12 12 16 14" />
-          </svg>
-        </button>
-
-        {/* 可见性切换（仅作者可见） */}
-        {isAuthor && (
-          <button className={`pe-vis-toggle ${visibility === 'public' ? 'pe-vis-public' : ''}`} onClick={toggleVisibility} title="切换可见性">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              {visibility === 'public' ? (
-                <>
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                  <circle cx="12" cy="12" r="3" />
-                </>
-              ) : (
-                <>
-                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
-                  <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
-                  <line x1="1" y1="1" x2="23" y2="23" />
-                </>
-              )}
-            </svg>
-            {visibility === 'public' ? '公开' : '私有'}
-          </button>
-        )}
-
-        {/* 目录按钮 */}
-        <button
-          className={`pe-btn pe-toc-btn ${showToc ? 'pe-btn--active' : ''}`}
-          onClick={() => setShowToc(!showToc)}
-          title="目录"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <line x1="8" y1="6" x2="21" y2="6" />
-            <line x1="8" y1="12" x2="21" y2="12" />
-            <line x1="8" y1="18" x2="21" y2="18" />
-            <line x1="3" y1="6" x2="3.01" y2="6" />
-            <line x1="3" y1="12" x2="3.01" y2="12" />
-            <line x1="3" y1="18" x2="3.01" y2="18" />
-          </svg>
-        </button>
-
         {canEdit && (
           <PageEditorMenu editor={editor} />
         )}
@@ -808,7 +775,7 @@ export default function PageEditor() {
       )}
 
       {/* 版本历史面板 */}
-      {showVersions && <div className="comment-overlay" onClick={() => { setShowVersions(false); setRestoreConfirmId(null) }} />}
+      {showVersions && <div className="comment-overlay" onClick={() => { setShowVersions(false); setRestoreConfirmId(null); setComparingVersion(null) }} />}
       <div className={`comment-panel version-panel ${showVersions ? 'comment-panel--open' : ''}`}>
         <div className="comment-panel-header">
           <h3>
@@ -818,7 +785,7 @@ export default function PageEditor() {
             </svg>
             版本历史
           </h3>
-          <button className="comment-panel-close" onClick={() => { setShowVersions(false); setRestoreConfirmId(null) }} aria-label="关闭">
+          <button className="comment-panel-close" onClick={() => { setShowVersions(false); setRestoreConfirmId(null); setComparingVersion(null) }} aria-label="关闭">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
@@ -826,56 +793,96 @@ export default function PageEditor() {
           </button>
         </div>
         <div className="comment-panel-body">
-          <div className="comment-list">
-            {versionsLoading ? (
-              <div className="comment-empty">加载中...</div>
-            ) : versions.length === 0 ? (
-              <div className="comment-empty">暂无版本历史</div>
-            ) : (
-              versions.map((v) => (
-                <div key={v.id} className="version-item">
-                  <div className="version-info">
-                    <div className="version-header">
-                      <span className="version-number">版本 {v.version}</span>
-                      {v.isRollback && <span className="version-rollback-badge">已恢复</span>}
+          {comparingVersion ? (
+            <div className="version-diff">
+              <div className="version-diff-head">
+                <span className="version-diff-title">
+                  版本 {comparingVersion.version} 对比当前
+                </span>
+                <button className="version-diff-back" onClick={() => setComparingVersion(null)}>
+                  返回版本列表
+                </button>
+              </div>
+              <div className="version-diff-body">
+                {diffLines.length === 0 ? (
+                  <div className="comment-empty">两个版本内容完全一致</div>
+                ) : (
+                  diffLines.map((l, idx) => (
+                    <div key={idx} className={`version-diff-line version-diff-${l.type}`}>
+                      <span className="version-diff-marker">
+                        {l.type === 'add' ? '+' : l.type === 'del' ? '−' : l.type === 'mod' ? '±' : ''}
+                      </span>
+                      <span className="version-diff-text">
+                        {l.type === 'mod' ? (
+                          <>
+                            <span className="vdl-old">{l.text}</span>
+                            <span className="vdl-arrow"> → </span>
+                            <span className="vdl-new">{l.replace}</span>
+                          </>
+                        ) : (
+                          l.text
+                        )}
+                      </span>
                     </div>
-                    <div className="version-meta">
-                      <span className="version-author">{v.authorName || '未知用户'}</span>
-                      <span className="comment-time">{formatDate(v.createdAt)}</span>
+                  ))
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="comment-list">
+              {versionsLoading ? (
+                <div className="comment-empty">加载中...</div>
+              ) : versions.length === 0 ? (
+                <div className="comment-empty">暂无版本历史</div>
+              ) : (
+                versions.map((v) => (
+                  <div key={v.id} className="version-item">
+                    <div className="version-info">
+                      <div className="version-header">
+                        <span className="version-number">版本 {v.version}</span>
+                        {v.isRollback && <span className="version-rollback-badge">已恢复</span>}
+                      </div>
+                      <div className="version-meta">
+                        <span className="version-author">{v.authorName || '未知用户'}</span>
+                        <span className="comment-time">{formatDate(v.createdAt)}</span>
+                      </div>
                     </div>
-                  </div>
-                  {canEdit && (
                     <div className="version-actions">
-                      {restoreConfirmId === v.id ? (
-                        <div className="version-confirm">
-                          <span className="version-confirm-text">确认恢复到此版本？</span>
+                      <button className="version-compare-btn" onClick={() => handleCompare(v)}>
+                        查看对比
+                      </button>
+                      {canEdit && (
+                        restoreConfirmId === v.id ? (
+                          <div className="version-confirm">
+                            <span className="version-confirm-text">确认恢复到此版本？</span>
+                            <button
+                              className="version-confirm-btn version-confirm-btn--yes"
+                              onClick={() => handleRestore(v.id)}
+                            >
+                              确认
+                            </button>
+                            <button
+                              className="version-confirm-btn"
+                              onClick={() => setRestoreConfirmId(null)}
+                            >
+                              取消
+                            </button>
+                          </div>
+                        ) : (
                           <button
-                            className="version-confirm-btn version-confirm-btn--yes"
-                            onClick={() => handleRestore(v.id)}
+                            className="version-restore-btn"
+                            onClick={() => setRestoreConfirmId(v.id)}
                           >
-                            确认
+                            恢复到此版本
                           </button>
-                          <button
-                            className="version-confirm-btn"
-                            onClick={() => setRestoreConfirmId(null)}
-                          >
-                            取消
-                          </button>
-                        </div>
-                      ) : (
-                        <button
-                          className="version-restore-btn"
-                          onClick={() => setRestoreConfirmId(v.id)}
-                        >
-                          恢复到此版本
-                        </button>
+                        )
                       )}
                     </div>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -929,6 +936,137 @@ export default function PageEditor() {
           )}
         </div>
       )}
+
+      {/* 底部栏：非富文本按钮 + 版本对比统计 */}
+      <div className="page-editor-bottom-bar">
+        <div className="pe-bottom-group pe-bottom-left">
+          <button className="viewer-back" onClick={() => navigate('/pages')} aria-label="返回">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="19" y1="12" x2="5" y2="12" />
+              <polyline points="12 19 5 12 12 5" />
+            </svg>
+            返回
+          </button>
+          <span className="pe-sep" />
+          <button
+            className={`pe-btn ${showVersions ? 'pe-btn--active' : ''}`}
+            onClick={() => {
+              if (!showVersions) loadVersions()
+              setShowVersions(!showVersions)
+            }}
+            title="版本历史"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+          </button>
+          <button
+            className={`pe-btn pe-toc-btn ${showToc ? 'pe-btn--active' : ''}`}
+            onClick={() => setShowToc(!showToc)}
+            title="目录"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="8" y1="6" x2="21" y2="6" />
+              <line x1="8" y1="12" x2="21" y2="12" />
+              <line x1="8" y1="18" x2="21" y2="18" />
+              <line x1="3" y1="6" x2="3.01" y2="6" />
+              <line x1="3" y1="12" x2="3.01" y2="12" />
+              <line x1="3" y1="18" x2="3.01" y2="18" />
+            </svg>
+          </button>
+          {isApp && ttsEnabled && (
+            <button
+              className={`pe-btn ${ttsStatus !== 'idle' ? 'pe-btn--active' : ''}`}
+              onClick={handleTTS}
+              title={ttsStatus === 'synthesizing' ? `合成中 ${ttsProgress}/${ttsTotal}` : ttsStatus === 'playing' ? '停止朗读' : '朗读文档'}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                {ttsStatus !== 'idle' ? (
+                  <>
+                    <rect x="6" y="4" width="4" height="16" />
+                    <rect x="14" y="4" width="4" height="16" />
+                  </>
+                ) : (
+                  <>
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" />
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14" />
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07" />
+                  </>
+                )}
+              </svg>
+            </button>
+          )}
+          <span className="pe-sep" />
+          <button className={`pe-share-btn ${copied ? 'pe-share-btn--copied' : ''}`} onClick={handleShare} title="复制链接">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              {copied ? (
+                <polyline points="20 6 9 17 4 12" />
+              ) : (
+                <>
+                  <circle cx="18" cy="5" r="3" />
+                  <circle cx="6" cy="12" r="3" />
+                  <circle cx="18" cy="19" r="3" />
+                  <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+                  <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+                </>
+              )}
+            </svg>
+          </button>
+          <button
+            className="pe-share-btn"
+            onClick={() => setShowShare(true)}
+            title="生成分享链接"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+          </button>
+          <button
+            className={`pe-share-btn ${showSearch ? 'pe-btn--active' : ''}`}
+            onClick={() => setShowSearch(!showSearch)}
+            title="搜索"
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </button>
+          {isAuthor && (
+            <button className={`pe-vis-toggle ${visibility === 'public' ? 'pe-vis-public' : ''}`} onClick={toggleVisibility} title="切换可见性">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                {visibility === 'public' ? (
+                  <>
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </>
+                ) : (
+                  <>
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </>
+                )}
+              </svg>
+              {visibility === 'public' ? '公开' : '私有'}
+            </button>
+          )}
+        </div>
+        <div className="pe-bottom-group pe-bottom-center">
+          {comparingVersion && (
+            <span className="pe-bottom-diff-info">
+              当前查看的版本 · <strong>版本 {comparingVersion.version}</strong>
+              <span className="diff-stat diff-stat--add">+{diffStats.add} 字</span>
+              <span className="diff-stat diff-stat--del">-{diffStats.del} 字</span>
+            </span>
+          )}
+        </div>
+        <div className="pe-bottom-group pe-bottom-right">
+          {saving && <span className="page-editor-saving">保存中...</span>}
+        </div>
+      </div>
     </div>
   )
 }
