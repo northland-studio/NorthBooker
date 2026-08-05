@@ -170,13 +170,13 @@ router.post('/', authMiddleware, (req, res) => {
   res.status(201).json({ id })
 })
 
-// 更新页面（需登录，仅作者或管理员）
+// 更新页面（需登录；作者本人或公开文档的登录用户可编辑，支持实时协作保存）
 router.put('/:id', authMiddleware, (req, res) => {
   const page = db.prepare('SELECT * FROM pages WHERE id = ?').get(req.params.id)
   if (!page) return res.status(404).json({ error: '页面不存在' })
 
-  const canEdit = page.author_id === req.user.id
-  if (!canEdit) return res.status(403).json({ error: '只能编辑自己的文档' })
+  const canEdit = page.author_id === req.user.id || page.visibility === 'public'
+  if (!canEdit) return res.status(403).json({ error: '无权限编辑该文档' })
 
   // Save version snapshot before update
   const current = db.prepare('SELECT title, content, author_id FROM pages WHERE id = ?').get(req.params.id)
