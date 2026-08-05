@@ -28,7 +28,7 @@ export async function authMiddleware(req, res, next) {
   ).run(xjUser.id, xjUser.username, xjUser.avatar || null, xjUser.level || 0, xjUser.contribution || 0, xjUser.email || null, now)
 
   // 查出本地 id（用于 owner_id 关联）
-  const local = db.prepare('SELECT id FROM users WHERE xuanjian_id = ?').get(xjUser.id)
+  const local = db.prepare('SELECT id, email FROM users WHERE xuanjian_id = ?').get(xjUser.id)
 
   req.user = {
     id: local.id,
@@ -38,6 +38,7 @@ export async function authMiddleware(req, res, next) {
     level: xjUser.level || 0,
     contribution: xjUser.contribution || 0,
     title: xjUser.title || null,
+    email: local?.email || null,
   }
   req.token = token
   next()

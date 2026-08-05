@@ -169,6 +169,17 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
   CREATE INDEX IF NOT EXISTS idx_login_logs_created ON login_logs(created_at);
+
+  -- 邮箱绑定验证（2.6.1）：发送验证邮件，链接一键验证
+  CREATE TABLE IF NOT EXISTS email_verifications (
+    token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    email TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_email_verify_user ON email_verifications(user_id);
 `)
 
 // 迁移：为已有的 page_fts 重新索引全部 pages（仅当 FTS 表为空时）
@@ -227,6 +238,13 @@ try {
 try {
   db.exec('ALTER TABLE users ADD COLUMN email TEXT')
   logger.info('db', '已迁移 users.email 列')
+} catch {
+  // 列已存在则跳过
+}
+// 迁移：pages.cowork_policy（协作编辑权限，2.6.1+）：open=任何登录用户可编辑 / author=仅作者可编辑
+try {
+  db.exec("ALTER TABLE pages ADD COLUMN cowork_policy TEXT NOT NULL DEFAULT 'open'")
+  logger.info('db', '已迁移 pages.cowork_policy 列')
 } catch {
   // 列已存在则跳过
 }

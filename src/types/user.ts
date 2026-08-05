@@ -12,6 +12,7 @@ export interface User {
   level: UserLevel
   contribution: number
   title: string | null
+  email?: string | null // 绑定邮箱（2.6.1+，订阅通知收件地址）
 }
 
 // 判断是否为管理员（level >= 1）
