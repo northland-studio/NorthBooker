@@ -2738,7 +2738,7 @@ button {
 .comment-overlay {
   position: fixed;
   inset: 0;
-  z-index: 24;
+  z-index: 40;
   background: var(--color-overlay);
 }
 
@@ -2746,7 +2746,7 @@ button {
   position: fixed;
   top: 0;
   right: 0;
-  z-index: 25;
+  z-index: 41;
   width: 380px;
   max-width: 90vw;
   height: 100vh;
@@ -3045,6 +3045,33 @@ body.dark .tts-reading-highlight {
 }
 .tts-pool-panel-toggle:hover {
   opacity: 1;
+}
+/* 整体进度条 */
+.tts-pool-panel-overall {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 0;
+}
+.tts-pool-overall-bar {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.tts-pool-overall-fill {
+  height: 100%;
+  background: #fff;
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+.tts-pool-overall-pct {
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-primary, #004AAD);
+  font-variant-numeric: tabular-nums;
 }
 .tts-pool-panel-body {
   padding: 10px 14px;

@@ -69,10 +69,10 @@ type DiffLineType = 'same' | 'add' | 'del' | 'mod'
 interface DiffSegment { type: 'same' | 'add' | 'del'; text: string }
 interface DiffLine { type: DiffLineType; text: string; segments?: DiffSegment[] }
 
-// HTML 转纯文本（去除标签，保留换行）
+// HTML 转纯文本（块级标签间插入换行，保证按段落分行，与文档块节点一一对应）
 function htmlToText(html: string): string {
   const tmp = document.createElement('div')
-  tmp.innerHTML = html || ''
+  tmp.innerHTML = (html || '').replace(/<\/(p|div|li|blockquote|h[1-6]|tr|pre)>/gi, '</$1>\n')
   return (tmp.textContent || '').replace(/\u00a0/g, ' ')
 }
 
@@ -919,15 +919,6 @@ export default function PageEditor() {
             placeholder="无标题文档"
             readOnly={!canEdit || !!comparingVersion}
           />
-          {comparingVersion && (
-            <div className="version-info-bar">
-              <span className="version-info-bar-title">版本 {versions.length - versions.findIndex((x) => x.id === comparingVersion.id)}</span>
-              <span className="diff-stat diff-stat--add">+{diffStats.add} 字</span>
-              <span className="diff-stat diff-stat--del">-{diffStats.del} 字</span>
-              <span className="version-info-bar-time">{formatDate(comparingVersion.createdAt)}</span>
-              <button className="version-info-bar-exit" onClick={exitCompare}>退出对比</button>
-            </div>
-          )}
           <div className={`page-editor-wrapper ${!canEdit || comparingVersion ? 'page-editor-wrapper--readonly' : ''}`}>
             <EditorContent editor={editor} />
           </div>
@@ -1053,6 +1044,17 @@ export default function PageEditor() {
                   </svg>
                 </button>
               </div>
+              <div className="tts-pool-panel-overall">
+                <div className="tts-pool-overall-bar">
+                  <div
+                    className="tts-pool-overall-fill"
+                    style={{ width: ttsTotal ? `${Math.round((ttsProgress / ttsTotal) * 100)}%` : '0%' }}
+                  />
+                </div>
+                <span className="tts-pool-overall-pct">
+                  {ttsTotal ? `${Math.round((ttsProgress / ttsTotal) * 100)}%` : '0%'}
+                </span>
+              </div>
               <div className="tts-pool-panel-body">
                 {ttsPools.map((p) => (
                   <div key={p.id} className="tts-pool-row">
@@ -1065,7 +1067,7 @@ export default function PageEditor() {
                     </div>
                     <span className="tts-pool-state">
                       {p.current != null
-                        ? `渲染第 ${p.current} 段中`
+                        ? `第 ${p.current} 段`
                         : p.done >= p.total && p.total > 0
                           ? '已完成'
                           : '等待中'}
@@ -1181,6 +1183,17 @@ export default function PageEditor() {
               </svg>
               {visibility === 'public' ? '公开' : '私有'}
             </button>
+          )}
+        </div>
+        <div className="pe-bottom-group pe-bottom-center">
+          {comparingVersion && (
+            <span className="pe-bottom-diff-info">
+              <strong>版本 {versions.length - versions.findIndex((x) => x.id === comparingVersion.id)}</strong>
+              <span className="diff-stat diff-stat--add">+{diffStats.add} 字</span>
+              <span className="diff-stat diff-stat--del">-{diffStats.del} 字</span>
+              <span className="pe-bottom-diff-time">{formatDate(comparingVersion.createdAt)}</span>
+              <button className="version-info-bar-exit" onClick={exitCompare}>退出对比</button>
+            </span>
           )}
         </div>
         <div className="pe-bottom-group pe-bottom-right">
