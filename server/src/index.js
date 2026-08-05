@@ -17,6 +17,7 @@ const { default: bus } = await import('./bus.js')
 const { WebSocketServer } = await import('ws')
 // Yjs 实时协作（仅在线文档，2.6.0）：y-websocket 协议
 const { setupWSConnection } = await import('y-websocket/bin/utils')
+const { verifyXuanjianToken } = await import('./oauth.js')
 
 // 北牖后端服务入口
 const PORT = process.env.PORT || 3090
@@ -36,8 +37,24 @@ collabWss.on('connection', (ws, req) => {
   setupWSConnection(ws, req)
 })
 
-// upgrade 分发：/api/collab/* → Yjs 协作；其余 → 订阅广播
-httpServer.on('upgrade', (req, socket, head) => {
+// 协作房间鉴权（2.6.1）：校验 token + 用户对该页面是否有编辑权限
+async function canEditCollabRoom(room, token) {
+  if (!token) return false
+  const xjUser = await verifyXuanjianToken(token)
+  if (!xjUser) return false
+  const user = db.prepare('SELECT id FROM users WHERE xuanjian_id = ?').get(xjUser.id)
+  if (!user) return false
+  const page = db.prepare('SELECT * FROM pages WHERE id = ?').get(room)
+  if (!page) return false
+  // 作者总是可编辑；公开文档按 cowork_policy（open=任何登录用户 / author=仅作者）；私有文档仅作者
+  if (page.author_id === user.id) return true
+  if (page.visibility !== 'public') return false
+  if (page.cowork_policy === 'author') return false
+  return true
+}
+
+// upgrade 分发：/api/collab/* → Yjs 协作（带鉴权）；其余 → 订阅广播
+httpServer.on('upgrade', async (req, socket, head) => {
   let pathname = ''
   try {
     pathname = new URL(req.url, 'http://localhost').pathname
@@ -46,6 +63,14 @@ httpServer.on('upgrade', (req, socket, head) => {
     return
   }
   if (pathname.startsWith('/api/collab/')) {
+    const room = decodeURIComponent(pathname.slice('/api/collab/'.length))
+    const token = new URL(req.url, 'http://localhost').searchParams.get('token') || ''
+    const allowed = await canEditCollabRoom(room, token)
+    if (!allowed) {
+      socket.write('HTTP/1.1 403 Forbidden\r\n\r\n')
+      socket.destroy()
+      return
+    }
     collabWss.handleUpgrade(req, socket, head, (ws) => collabWss.emit('connection', ws, req))
   } else {
     wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws))

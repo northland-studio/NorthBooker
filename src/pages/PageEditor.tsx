@@ -20,7 +20,7 @@ import { TableHeader } from '@tiptap/extension-table-header'
 import Collaboration from '@tiptap/extension-collaboration'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
-import { fetchPage, updatePage, fetchPageVersions, restorePageVersion } from '@/api/pages'
+import { fetchPage, updatePage, fetchPageVersions, restorePageVersion, updateCoworkSet } from '@/api/pages'
 import { fetchSubscriptions, subscribe, unsubscribe } from '@/api/subscriptions'
 import { fetchAnnotations, addAnnotation, deleteAnnotation, type Annotation } from '@/api/annotations'
 import { useAuthStore } from '@/store/auth'
@@ -486,6 +486,8 @@ export default function PageEditor() {
   // 初始内容同步标记：seedPending=sync 早于 fetch 完成，待 fetch 后补写；seedDone=初始内容已同步，之前禁止自动保存（防止空内容覆盖数据库）
   const seedPendingRef = useRef(false)
   const seedDoneRef = useRef(false)
+  // 文档协作编辑权限（2.6.1）：open=任何登录用户可编辑 / author=仅作者可编辑
+  const [coworkPolicy, setCoworkPolicy] = useState<'open' | 'author'>('open')
 
   // 更新目录（编辑时 + 加载内容后都要调用，只读文档也能用目录）
   const updateToc = (ed: any) => {
@@ -547,12 +549,13 @@ export default function PageEditor() {
     },
   })
 
-  // 判断是否有编辑权限（实时协作：公开文档登录用户可编辑，私有仅作者本人；管理员也不能修改用户私有文档）
+  // 判断是否有编辑权限（实时协作：公开文档按协作策略，author 策略或私有仅作者本人；管理员也不能修改用户私有文档）
   const canEdit = useMemo(() => {
     if (!user) return false
-    if (visibility === 'public') return true
-    return authorId > 0 && user.id === authorId
-  }, [user, authorId, visibility])
+    if (authorId > 0 && user.id === authorId) return true
+    if (visibility !== 'public') return false
+    return coworkPolicy !== 'author'
+  }, [user, authorId, visibility, coworkPolicy])
 
   // 非编辑者禁止编辑 ProseMirror
   useEffect(() => {
@@ -632,17 +635,25 @@ export default function PageEditor() {
         setCreatedAt(page.createdAt ?? page.created_at)
         setUpdatedAt(page.updatedAt ?? page.updated_at)
         pageContentRef.current = page.content || ''
+        // 协作编辑权限（2.6.1）：仅具备编辑权限的用户才连接协作房间，只读用户直接用内容快照
+        const pagePolicy: 'open' | 'author' = page.cowork_policy === 'author' ? 'author' : 'open'
+        setCoworkPolicy(pagePolicy)
+        const pageAuthorId = page.authorId ?? page.author_id
+        const canEditThis = !!user && (pageAuthorId === user.id || (page.visibility === 'public' && pagePolicy !== 'author'))
         // 若 sync 事件早于 fetch 完成触发（当时 ref 为空），在此补写初始内容
         if (seedPendingRef.current) {
           seedPendingRef.current = false
           trySeedContent()
         }
-        // 启用实时协作：公开文档或作者本人（登录用户）；Y.Doc 始终存在，仅连接房间
-        const canCollab = !!user && (page.visibility === 'public' || page.authorId === user.id || page.author_id === user.id)
+        // 启用实时协作：具备编辑权限的登录用户连接房间；Y.Doc 始终存在，仅连接房间
+        const canCollab = canEditThis
+        let willCollab = false
         if (canCollab && !providerRef.current) {
           try {
             const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/collab/`
-            const provider = new WebsocketProvider(wsUrl, id, ydocRef.current!)
+            const provider = new WebsocketProvider(wsUrl, id, ydocRef.current!, {
+              params: { token: localStorage.getItem('nb_token') || '' },
+            })
             providerRef.current = provider
             // 房间内容同步完成后，若 Yjs 文档为空才写入初始 HTML（避免覆盖他人实时内容）
             provider.on('sync', (synced: boolean) => {
@@ -655,6 +666,7 @@ export default function PageEditor() {
               trySeedContent()
             })
             setCollabStatus('ready')
+            willCollab = true
           } catch {
             // 协作连接失败不阻断正常编辑
             setCollabStatus('skipped')
@@ -664,7 +676,14 @@ export default function PageEditor() {
         }
         loadTodayStats()
         setWriteStats({ ...writeStatsRef.current })
-        setLoading(false)
+        if (!willCollab) {
+          // 非协作：初始内容由 effect 直接写入，可立即结束加载态
+          setLoading(false)
+        } else {
+          // 协作：内容在 sync 完成后由 trySeedContent 填充并结束加载态；
+          // 兜底超时，避免 WebSocket 异常导致永久停留在加载中
+          setTimeout(() => setLoading(false), 12000)
+        }
       })
       .catch(() => {
         setError(true)
@@ -682,8 +701,9 @@ export default function PageEditor() {
       editor.commands.setContent(pageContentRef.current)
       pageContentRef.current = ''
     }
-    // 无论是否写入（Yjs 房间已有内容视为已同步），标记完成，解锁自动保存
+    // 无论是否写入（Yjs 房间已有内容视为已同步），标记完成，解锁自动保存并结束加载态
     seedDoneRef.current = true
+    setLoading(false)
   }, [editor])
 
   useEffect(() => {
@@ -729,6 +749,17 @@ export default function PageEditor() {
       await updatePage(id!, { visibility: newVis })
     } catch {
       setVisibility(visibility)
+    }
+  }
+
+  // 切换协作编辑权限（2.6.1）：open=任何登录用户 / author=仅作者（仅作者可操作）
+  const toggleCoworkPolicy = async () => {
+    const next = coworkPolicy === 'open' ? 'author' : 'open'
+    setCoworkPolicy(next)
+    try {
+      await updateCoworkSet(id!, next)
+    } catch {
+      setCoworkPolicy(coworkPolicy)
     }
   }
 
@@ -1571,7 +1602,7 @@ export default function PageEditor() {
             </svg>
           </button>
           {isAuthor && (
-            <button className={`pe-vis-toggle ${visibility === 'public' ? 'pe-vis-public' : ''}`} onClick={toggleVisibility} title="切换可见性">
+            <button className={`pe-vis-toggle ${visibility === 'public' ? 'pe-vis-public' : ''}`} onClick={toggleVisibility} title={t('editor.toggleVisibility')}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 {visibility === 'public' ? (
                   <>
@@ -1586,7 +1617,31 @@ export default function PageEditor() {
                   </>
                 )}
               </svg>
-              {visibility === 'public' ? '公开' : '私有'}
+              {visibility === 'public' ? t('editor.public') : t('editor.private')}
+            </button>
+          )}
+          {/* 协作编辑权限（2.6.1）：仅作者可见，open=任何登录用户 / author=仅作者 */}
+          {isAuthor && visibility === 'public' && (
+            <button
+              className={`pe-vis-toggle ${coworkPolicy === 'open' ? 'pe-vis-public' : ''}`}
+              onClick={toggleCoworkPolicy}
+              title={t('editor.coworkTitle')}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                {coworkPolicy === 'open' ? (
+                  <>
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                    <circle cx="12" cy="12" r="3" />
+                  </>
+                ) : (
+                  <>
+                    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                    <line x1="1" y1="1" x2="23" y2="23" />
+                  </>
+                )}
+              </svg>
+              {coworkPolicy === 'open' ? t('editor.coworkOpen') : t('editor.coworkAuthor')}
             </button>
           )}
         </div>

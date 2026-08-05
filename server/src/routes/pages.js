@@ -158,6 +158,28 @@ router.get('/:id', optionalAuthMiddleware, (req, res) => {
   res.json(row)
 })
 
+// 获取文档协作权限（2.6.1）：谁能编辑在线文档
+router.get('/:id/cowork_set', authMiddleware, (req, res) => {
+  const page = db.prepare('SELECT id, cowork_policy FROM pages WHERE id = ?').get(req.params.id)
+  if (!page) return res.status(404).json({ error: '页面不存在' })
+  res.json({ policy: page.cowork_policy || 'open' })
+})
+
+// 更新文档协作权限（仅作者或管理员）
+router.put('/:id/cowork_set', authMiddleware, (req, res) => {
+  const page = db.prepare('SELECT * FROM pages WHERE id = ?').get(req.params.id)
+  if (!page) return res.status(404).json({ error: '页面不存在' })
+  if (page.author_id !== req.user.id && req.user.level < 1) {
+    return res.status(403).json({ error: '仅作者可修改协作权限' })
+  }
+  const { policy } = req.body
+  if (!['open', 'author'].includes(policy)) {
+    return res.status(400).json({ error: '无效的协作权限，仅支持 open / author' })
+  }
+  db.prepare('UPDATE pages SET cowork_policy = ? WHERE id = ?').run(policy, req.params.id)
+  res.json({ success: true, policy })
+})
+
 // 创建页面（需登录）
 router.post('/', authMiddleware, (req, res) => {
   const { title, parentId, content } = req.body
@@ -175,7 +197,9 @@ router.put('/:id', authMiddleware, (req, res) => {
   const page = db.prepare('SELECT * FROM pages WHERE id = ?').get(req.params.id)
   if (!page) return res.status(404).json({ error: '页面不存在' })
 
-  const canEdit = page.author_id === req.user.id || page.visibility === 'public'
+  const canEdit =
+    page.author_id === req.user.id ||
+    (page.visibility === 'public' && page.cowork_policy !== 'author')
   if (!canEdit) return res.status(403).json({ error: '无权限编辑该文档' })
 
   // Save version snapshot before update

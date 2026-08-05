@@ -52,3 +52,15 @@ export async function restorePageVersion(id: string, versionId: number | string)
   const { data } = await client.post(`/pages/${id}/versions/${versionId}/restore`)
   return data
 }
+
+// 获取文档协作权限（2.6.1）
+export async function fetchCoworkSet(id: string) {
+  const { data } = await client.get(`/pages/${id}/cowork_set`)
+  return data as { policy: 'open' | 'author' }
+}
+
+// 更新文档协作权限（仅作者）
+export async function updateCoworkSet(id: string, policy: 'open' | 'author') {
+  const { data } = await client.put(`/pages/${id}/cowork_set`, { policy })
+  return data
+}
