@@ -18,12 +18,17 @@ export default function LoginScreen({ onDone }: Props) {
     try {
       const data = JSON.parse(event.nativeEvent.data)
       if (data.type !== 'oauth' || !data.hash) return
-      const params = new URLSearchParams(data.hash.replace(/^#/, ''))
-      const token = params.get('access_token')
+      // 手动解析 hash 查询串（Hermes 的 URLSearchParams 兼容性更稳的做法）
+      const params: Record<string, string> = {}
+      for (const pair of data.hash.replace(/^#/, '').split('&')) {
+        const i = pair.indexOf('=')
+        if (i > 0) params[decodeURIComponent(pair.slice(0, i))] = decodeURIComponent(pair.slice(i + 1))
+      }
+      const token = params['access_token']
       if (token) {
         const user = {
-          username: params.get('username') || '',
-          level: Number(params.get('level') || 0),
+          username: params['username'] || '',
+          level: Number(params['level'] || 0),
         }
         await login(token, user)
         onDone?.()
