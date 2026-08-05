@@ -23,6 +23,9 @@ function toDoc(row) {
     folder_id: row.folder_id ?? null,
     visibility: row.visibility || 'public',
     owner_id: row.owner_id,
+    owner: row.owner_id
+      ? { id: row.owner_id, username: row.owner_name, avatar: row.owner_avatar || null }
+      : null,
     tags: row.tags ? String(row.tags).split(',').filter(Boolean) : [],
     deletedAt: row.deleted_at || null,
   }
@@ -42,12 +45,18 @@ router.get('/', optionalAuthMiddleware, (req, res) => {
   let rows
   if (folderId !== undefined) {
     if (folderId) {
-      rows = db.prepare(`SELECT d.* FROM documents d WHERE d.deleted_at IS NULL AND d.folder_id = ? AND (d.visibility != 'private' ${isOwner}) ORDER BY d.updated_at DESC`).all(folderId)
+      rows = db.prepare(`SELECT d.*, u.username AS owner_name, u.avatar AS owner_avatar
+        FROM documents d LEFT JOIN users u ON u.id = d.owner_id
+        WHERE d.deleted_at IS NULL AND d.folder_id = ? AND (d.visibility != 'private' ${isOwner}) ORDER BY d.updated_at DESC`).all(folderId)
     } else {
-      rows = db.prepare(`SELECT d.* FROM documents d WHERE d.deleted_at IS NULL AND d.folder_id IS NULL AND (d.visibility != 'private' ${isOwner}) ORDER BY d.updated_at DESC`).all()
+      rows = db.prepare(`SELECT d.*, u.username AS owner_name, u.avatar AS owner_avatar
+        FROM documents d LEFT JOIN users u ON u.id = d.owner_id
+        WHERE d.deleted_at IS NULL AND d.folder_id IS NULL AND (d.visibility != 'private' ${isOwner}) ORDER BY d.updated_at DESC`).all()
     }
   } else {
-    rows = db.prepare(`SELECT d.* FROM documents d WHERE d.deleted_at IS NULL AND (d.visibility != 'private' ${isOwner}) ORDER BY d.updated_at DESC`).all()
+    rows = db.prepare(`SELECT d.*, u.username AS owner_name, u.avatar AS owner_avatar
+      FROM documents d LEFT JOIN users u ON u.id = d.owner_id
+      WHERE d.deleted_at IS NULL AND (d.visibility != 'private' ${isOwner}) ORDER BY d.updated_at DESC`).all()
   }
   res.json(rows.map(toDoc))
 })
@@ -55,14 +64,20 @@ router.get('/', optionalAuthMiddleware, (req, res) => {
 // 回收站列表（需登录，管理员可见全部，普通用户仅自己删除的）
 router.get('/trash', authMiddleware, (req, res) => {
   const rows = req.user.level >= 1
-    ? db.prepare('SELECT * FROM documents WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC').all()
-    : db.prepare('SELECT * FROM documents WHERE deleted_at IS NOT NULL AND owner_id = ? ORDER BY deleted_at DESC').all(req.user.id)
+    ? db.prepare(`SELECT d.*, u.username AS owner_name, u.avatar AS owner_avatar
+        FROM documents d LEFT JOIN users u ON u.id = d.owner_id
+        WHERE d.deleted_at IS NOT NULL ORDER BY d.deleted_at DESC`).all()
+    : db.prepare(`SELECT d.*, u.username AS owner_name, u.avatar AS owner_avatar
+        FROM documents d LEFT JOIN users u ON u.id = d.owner_id
+        WHERE d.deleted_at IS NOT NULL AND d.owner_id = ? ORDER BY d.deleted_at DESC`).all(req.user.id)
   res.json(rows.map(toDoc))
 })
 
 // 获取单个文档（回收站内文档不可见）
 router.get('/:id', (req, res) => {
-  const row = db.prepare('SELECT * FROM documents WHERE id = ? AND deleted_at IS NULL').get(req.params.id)
+  const row = db.prepare(`SELECT d.*, u.username AS owner_name, u.avatar AS owner_avatar
+    FROM documents d LEFT JOIN users u ON u.id = d.owner_id
+    WHERE d.id = ? AND d.deleted_at IS NULL`).get(req.params.id)
   if (!row) return res.status(404).json({ error: '文档不存在' })
   res.json(toDoc(row))
 })
@@ -96,7 +111,9 @@ router.put('/:id', authMiddleware, (req, res) => {
       .run(tagStr, updatedAt, req.params.id)
   }
 
-  const row = db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id)
+  const row = db.prepare(`SELECT d.*, u.username AS owner_name, u.avatar AS owner_avatar
+    FROM documents d LEFT JOIN users u ON u.id = d.owner_id
+    WHERE d.id = ?`).get(req.params.id)
   bus.emit('document:updated', { documentId: req.params.id })
   res.json(toDoc(row))
 })

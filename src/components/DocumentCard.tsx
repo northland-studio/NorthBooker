@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import type { Document } from '@/types/document'
 import { getFileTypeLabel, formatSize, formatDate } from '@/utils/fileType'
 import FileTypeIcon from './FileTypeIcon'
@@ -14,9 +14,17 @@ export default function DocumentCard({ doc, showCheckbox, checked, onToggle }: {
 }) {
   const [imgLoaded, setImgLoaded] = useState(false)
   const [imgError, setImgError] = useState(false)
+  const navigate = useNavigate()
   const hasThumb = !!doc.thumbnail
   const showThumb = hasThumb && !imgError && doc.type !== 'image'
   const showImagePreview = doc.type === 'image'
+
+  // 点击上传者跳转其个人主页（卡片本身是 Link，阻止冒泡避免跳转到文档）
+  const openOwner = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (doc.owner) navigate(`/profile/${doc.owner.id}`)
+  }
 
   return (
     <div className="doc-card-wrapper">
@@ -50,6 +58,16 @@ export default function DocumentCard({ doc, showCheckbox, checked, onToggle }: {
             <span>{formatSize(doc.size)}</span>
             <span>{formatDate(doc.updatedAt)}</span>
           </div>
+          {doc.owner && (
+            <button className="doc-card-owner user-link" onClick={openOwner} title={doc.owner.username}>
+              {doc.owner.avatar ? (
+                <img className="user-link-avatar" src={doc.owner.avatar} alt="" />
+              ) : (
+                <span className="user-link-avatar-fallback">{doc.owner.username.slice(0, 1).toUpperCase()}</span>
+              )}
+              {doc.owner.username}
+            </button>
+          )}
           {doc.tags && doc.tags.length > 0 && (
             <div className="doc-card-tags">
               {doc.tags.slice(0, 3).map((t) => (

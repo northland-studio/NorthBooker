@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { DocPreview } from '@doc-preview/react'
 import { useThemeStore } from '@/store/theme'
 import { fetchDocumentById } from '@/api/documents'
@@ -161,6 +161,16 @@ export default function Viewer() {
             <span className="doc-tag">{getFileTypeLabel(doc.type)}</span>
             <span>{formatSize(doc.size)}</span>
             <span>{formatDate(doc.updatedAt)}</span>
+            {doc.owner && (
+              <Link to={`/profile/${doc.owner.id}`} className="user-link" title={doc.owner.username}>
+                {doc.owner.avatar ? (
+                  <img className="user-link-avatar" src={doc.owner.avatar} alt="" />
+                ) : (
+                  <span className="user-link-avatar-fallback">{doc.owner.username.slice(0, 1).toUpperCase()}</span>
+                )}
+                {doc.owner.username}
+              </Link>
+            )}
           </span>
         </div>
         <div className="viewer-actions">

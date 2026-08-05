@@ -593,6 +593,7 @@ export default function Documents() {
             <span className="doc-list-cell doc-list-cell--name">名称（回收站）</span>
             <span className="doc-list-cell doc-list-cell--type">类型</span>
             <span className="doc-list-cell doc-list-cell--size">大小</span>
+            <span className="doc-list-cell doc-list-cell--owner">上传者</span>
             <span className="doc-list-cell doc-list-cell--date">删除时间</span>
             <span className="doc-list-cell doc-list-cell--actions" />
           </div>
@@ -613,6 +614,26 @@ export default function Documents() {
                 </div>
                 <span className="doc-list-cell doc-list-cell--type"><span className="doc-tag">{getFileTypeLabel(d.type)}</span></span>
                 <span className="doc-list-cell doc-list-cell--size">{formatSize(d.size)}</span>
+                <span className="doc-list-cell doc-list-cell--owner">
+                  {d.owner && (
+                    <button
+                      className="user-link"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        navigate(`/profile/${d.owner!.id}`)
+                      }}
+                      title={d.owner.username}
+                    >
+                      {d.owner.avatar ? (
+                        <img className="user-link-avatar" src={d.owner.avatar} alt="" />
+                      ) : (
+                        <span className="user-link-avatar-fallback">{d.owner.username.slice(0, 1).toUpperCase()}</span>
+                      )}
+                      {d.owner.username}
+                    </button>
+                  )}
+                </span>
                 <span className="doc-list-cell doc-list-cell--date">{formatDate(d.deletedAt || d.updatedAt)}</span>
                 <span className="doc-list-cell doc-list-cell--actions">
                   <button className="link-btn" onClick={() => handleTrashRestore(d.id)}>恢复</button>
@@ -636,6 +657,7 @@ export default function Documents() {
             <span className="doc-list-cell doc-list-cell--name">名称</span>
             <span className="doc-list-cell doc-list-cell--type">类型</span>
             <span className="doc-list-cell doc-list-cell--size">大小</span>
+            <span className="doc-list-cell doc-list-cell--owner">上传者</span>
             <span className="doc-list-cell doc-list-cell--date">更新时间</span>
             <span className="doc-list-cell doc-list-cell--actions" />
           </div>
@@ -660,6 +682,7 @@ export default function Documents() {
               </div>
               <span className="doc-list-cell doc-list-cell--type"><span className="doc-tag">文件夹</span></span>
               <span className="doc-list-cell doc-list-cell--size">-</span>
+              <span className="doc-list-cell doc-list-cell--owner">-</span>
               <span className="doc-list-cell doc-list-cell--date">{formatDate(f.created_at)}</span>
               <span className="doc-list-cell doc-list-cell--actions" />
             </div>
@@ -691,6 +714,26 @@ export default function Documents() {
                 </Link>
                 <span className="doc-list-cell doc-list-cell--type"><span className="doc-tag">{getFileTypeLabel(d.type)}</span></span>
                 <span className="doc-list-cell doc-list-cell--size">{formatSize(d.size)}</span>
+                <span className="doc-list-cell doc-list-cell--owner">
+                  {d.owner && (
+                    <button
+                      className="user-link"
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        navigate(`/profile/${d.owner!.id}`)
+                      }}
+                      title={d.owner.username}
+                    >
+                      {d.owner.avatar ? (
+                        <img className="user-link-avatar" src={d.owner.avatar} alt="" />
+                      ) : (
+                        <span className="user-link-avatar-fallback">{d.owner.username.slice(0, 1).toUpperCase()}</span>
+                      )}
+                      {d.owner.username}
+                    </button>
+                  )}
+                </span>
                 <span className="doc-list-cell doc-list-cell--date">{formatDate(d.updatedAt)}</span>
                 <span className="doc-list-cell doc-list-cell--actions">
                   {!selectMode && <BookmarkButton docId={d.id} />}

@@ -12,6 +12,7 @@ export interface Document {
   thumbnail?: string
   visibility?: 'public' | 'private'
   owner_id?: number | null
+  owner?: { id: number; username: string; avatar?: string | null } | null
   tags?: string[]
   deletedAt?: string | null
 }
