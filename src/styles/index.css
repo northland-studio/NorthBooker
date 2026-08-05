@@ -3148,6 +3148,68 @@ body.dark .tts-reading-highlight {
   box-shadow: 0 0 0 1px rgba(234, 179, 8, 0.32);
 }
 
+/* ===== 版本对比 diff 视图（GitHub / VS Code 风格） ===== */
+.version-diff-view {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.8;
+}
+.vd-row {
+  display: flex;
+  gap: 8px;
+  padding: 1px 14px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.vd-marker {
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+  color: var(--color-text-muted);
+  user-select: none;
+  font-weight: 700;
+}
+.vd-same {
+  color: var(--color-text-muted);
+}
+.vd-add {
+  background: rgba(22, 163, 74, 0.16);
+}
+.vd-add .vd-marker {
+  color: #16a34a;
+}
+.vd-del {
+  background: rgba(220, 38, 38, 0.15);
+}
+.vd-del .vd-marker {
+  color: #dc2626;
+}
+.vd-del .vd-text {
+  color: #b91c1c;
+  text-decoration: line-through;
+}
+.vd-mod {
+  background: rgba(234, 179, 8, 0.18);
+}
+.vd-mod .vd-marker {
+  color: #eab308;
+}
+.vd-inline-del {
+  color: #dc2626;
+  text-decoration: line-through;
+}
+.vd-inline-add {
+  color: #16a34a;
+  font-weight: 600;
+}
+
 /* 版本信息条（对比时显示在正文上方居中） */
 .version-info-bar {
   display: flex;
