@@ -30,8 +30,9 @@ jobs:
 
       - name: Setup Android SDK
         run: |
-          yes | sdkmanager --licenses > /dev/null || true
-          sdkmanager "platforms;android-36" "build-tools;36.1.0" "cmake;3.22.1" "ndk;29.0.13846066" > /dev/null || true
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0" "cmake;3.22.1" "ndk;27.1.12297006" > /dev/null 2>&1 || true
 
       - name: Install dependencies
         working-directory: Android
