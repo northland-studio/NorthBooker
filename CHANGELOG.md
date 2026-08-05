@@ -3,6 +3,19 @@
 本文件记录北牖（NorthBooker）项目的版本演进与变更内容。
 发布单位：北域工作室（Northland Studio）
 
+## v1.0.0 (Android) — 2026-08-05
+
+### 新增
+
+- **功能**：Android 客户端正式发布 — React Native 0.86 + TypeScript，三 Tab 结构（文档 / 在线文档 / 设置）
+- **功能**：OAuth 登录 — WebView 内完成玄剑官网授权，access_token 持久化到本地（AsyncStorage）
+- **功能**：文档列表 — 原生 FlatList 展示托管文档（SVG 类型图标 / 大小 / 更新时间），点击进入 WebView 查看器（复用网页版 @doc-preview 渲染）
+- **功能**：在线文档 — 原生页面树浏览 + WebView 复用网页版 Tiptap 编辑器
+- **功能**：语音朗读 — 系统 TTS 开箱即用；可选离线引擎（MeloTTS 中英双语 / Theresa 804 音色 / AIShell3 174 音色），模型**仅通过七牛 CDN 下载**（服务器签名代理），本地 libarchive 解压
+- **功能**：自动更新 — 元数据与 APK **仅使用 CDN 分发**（七牛私有空间签名 URL），应用内检查 / 下载进度 / 系统安装器引导安装
+- **功能**：明暗双主题（白 + #004AAD / #1A1B1D + #004AAD）、极简 SVG 图标
+- **功能**：CI/CD — GitHub Actions 构建 release APK 并自动发布到七牛 CDN 更新源
+
 ## v2.5.1 (Electron) — 2026-08-05
 
 ### 新增

@@ -17,6 +17,7 @@
 ![OAuth](https://img.shields.io/badge/OAuth-2.0-4A90D9)
 ![Tiptap](https://img.shields.io/badge/Tiptap-Rich%20Text-3182CE)
 ![Electron](https://img.shields.io/badge/Electron-31-47848F?logo=electron&logoColor=white)
+![React Native](https://img.shields.io/badge/React%20Native-0.86-61DAFB?logo=react&logoColor=white)
 ![PWA](https://img.shields.io/badge/PWA-Ready-5A0FC8?logo=pwa&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-blue)
 
@@ -59,6 +60,9 @@
 - 标记读取：TTS 语音朗读在线文档（Edge 内置 / sherpa-onnx 离线音色模型，支持点哪从哪读）
 - 朗读体验：离线模型多款可选 — AIShell3（174 音色）/ Theresa（804 音色）/ MeloTTS（中英双语 44100Hz），朗读时高亮当前句子并跟随滚动
 - 长文朗读：四池并行流水线合成（上限 600 段），实时进度浮窗展示各池状态
+- Android 客户端：React Native 原生三 Tab（文档 / 在线文档 / 设置），OAuth 单点登录，WebView 复用网页版查看器与编辑器
+- Android 语音朗读：系统 TTS 开箱即用 + 离线模型（MeloTTS 中英双语 / Theresa 804 音色 / AIShell3 174 音色，仅 CDN 下载）
+- Android 自动更新：更新元数据与 APK 仅通过七牛 CDN 分发，应用内检查 / 下载 / 系统安装器引导安装
 - 批量操作：多选移动、删除文档 + 在线文档多选批量删除
 - 右键菜单：文档列表 + 在线文档列表支持右键操作
 - 文档版本历史：自动快照 + 回滚
@@ -81,6 +85,11 @@
 | 文档渲染 | @doc-preview/react |
 | 富文本编辑 | Tiptap (ProseMirror) |
 | 桌面封装 | Electron 31 |
+| Android 客户端 | React Native 0.86 + TypeScript |
+| Android 导航 | React Navigation（原生栈 + 底部 Tab） |
+| Android 内嵌 | react-native-webview（查看器 / 编辑器 / OAuth） |
+| Android 离线 TTS | react-native-sherpa-onnx（libarchive 解压 + ONNX 推理） |
+| Android 文件 | @dr.pogodin/react-native-fs |
 | 后端 | Node.js + Express |
 | 数据库 | SQLite (better-sqlite3) |
 | 对象存储 | 七牛云（东南亚 as0 区域，bucket: northbooker） |
@@ -126,6 +135,19 @@ northbooker/
 │   │   ├── style.css
 │   │   └── app.js
 │   └── package.json           # 桌面版依赖（electron-builder）
+├── Android/                   # Android 客户端（v1.0.0，React Native 0.86）
+│   ├── App.tsx                # 导航根（原生栈 + 底部 Tab + 登录门禁）
+│   ├── src/
+│   │   ├── api/               # 接口封装（client 统一 token / documents / updates）
+│   │   ├── components/        # 通用组件（FileIcon SVG 图标）
+│   │   ├── screens/           # 页面（Documents / Pages / Viewer / PageEditor / Login / TtsSettings / Update / Settings）
+│   │   ├── store/             # 状态（auth / settings 主题与 TTS 偏好）
+│   │   ├── tts/               # 朗读引擎（系统 TTS / sherpa 离线，模型仅 CDN 下载）
+│   │   ├── update/            # 自动更新（CDN latest.json + APK 下载安装）
+│   │   ├── config.ts          # API 地址 / CDN 代理 / 版本常量
+│   │   └── theme.ts           # 明暗主题（白 + #004AAD / #1A1B1D + #004AAD）
+│   ├── scripts/publish-to-cdn.js # 发布 APK + latest.json 到七牛 CDN
+│   └── android/               # Gradle 工程（com.northbooker，含原生模块：系统 TTS / WAV 播放 / APK 安装）
 ├── public/                    # 前端静态资源与示例文档
 │   └── manifest.json          # PWA 清单
 ├── .github/workflows/         # GitHub Actions 构建流水线
@@ -404,6 +426,35 @@ npm run build
 ### CI/CD 自动构建
 
 推送至 `main` 分支（`electron/` 目录有变更）或手动触发工作流，GitHub Actions 自动构建并上传三平台安装包至 GitHub Releases 与 Qiniu CDN。
+
+---
+## Android 版
+
+北牖提供基于 React Native 的 Android 客户端（`Android/` 目录），原生三 Tab 结构：文档（托管文件列表）、在线文档（页面树）、设置。文档查看器与在线文档编辑器复用网页版（react-native-webview 内嵌，自动注入登录态）。
+
+**下载仅使用 CDN**：Android 端所有运行时下载（离线 TTS 模型、APK 更新包）一律走七牛私有空间签名 URL（经 `https://northbooker.xuanjian.top/api/updates/files/...` 服务器代理），不依赖 GitHub Releases。
+
+### 构建 Android 应用
+
+```bash
+cd Android
+npm install
+# 生成调试 APK
+cd android && ./gradlew assembleDebug
+# 生成发布 APK（本地无 keystore 时用 debug 签名）
+cd android && ./gradlew assembleRelease
+```
+
+### 自动更新（仅 CDN）
+
+- 更新元数据：`GET /api/updates/android/latest.json`（服务器从七牛 `releases/android/latest.json` 读取）
+- APK 下载：`GET /api/updates/files/android/<apk>` → 302 到七牛签名 URL（仅 CDN）
+- 应用内：设置 → 检查更新 → 下载进度 → 系统安装器引导安装（`REQUEST_INSTALL_PACKAGES` + FileProvider）
+- 发布：`node Android/scripts/publish-to-cdn.js --apk <app-release.apk>` 自动生成并上传 `latest.json` 与 APK
+
+### CI/CD 自动构建
+
+推送至 `main` 分支（`Android/` 目录有变更）或手动触发，`.github/workflows/build-android.yml` 构建 release APK 并自动发布到七牛 CDN 更新源。建议在 GitHub Secrets 配置稳定签名密钥（`ANDROID_KEYSTORE_BASE64` / `ANDROID_KEYSTORE_PASSWORD` / `ANDROID_KEY_ALIAS` / `ANDROID_KEY_PASSWORD`），保证跨版本更新安装时签名一致；未配置时使用 debug 签名。
 
 ---
 
