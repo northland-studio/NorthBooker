@@ -17,6 +17,7 @@ import {
 } from '@/api/admin'
 import { updateDocumentTitle } from '@/api/uploads'
 import { fetchTrash, restoreDocument, permanentDeleteDocument } from '@/api/documents'
+import { useT } from '@/i18n'
 import type { Document } from '@/types/document'
 
 type Tab = 'documents' | 'users' | 'trash' | 'audit' | 'login' | 'backup'
@@ -56,6 +57,7 @@ const ACTION_LABELS: Record<string, string> = {
 
 // 管理后台
 export default function Admin() {
+  const t = useT()
   const [stats, setStats] = useState<AdminStats | null>(null)
   const [docs, setDocs] = useState<AdminDocument[]>([])
   const [users, setUsers] = useState<AdminUser[]>([])
@@ -152,15 +154,15 @@ export default function Admin() {
     }
   }
 
-  if (loading) return <div className="documents-status">加载中...</div>
-  if (error) return <div className="documents-status">数据加载失败，请确认权限后重试</div>
+  if (loading) return <div className="documents-status">{t('doc.loading')}</div>
+  if (error) return <div className="documents-status">{t('doc.loadFailed')}</div>
 
   return (
     <div className="admin-page">
       <div className="admin-header">
-        <h1 className="admin-title">管理后台</h1>
+        <h1 className="admin-title">{t('admin.title')}</h1>
         <button className="btn-refresh" onClick={loadAll}>
-          刷新
+          {t('admin.refresh')}
         </button>
       </div>
 
@@ -188,12 +190,12 @@ export default function Admin() {
 
       {/* Tab 切换 */}
       <div className="admin-tabs">
-        <button className={`admin-tab ${tab === 'documents' ? 'active' : ''}`} onClick={() => setTab('documents')}>文档管理</button>
-        <button className={`admin-tab ${tab === 'users' ? 'active' : ''}`} onClick={() => setTab('users')}>用户管理</button>
-        <button className={`admin-tab ${tab === 'trash' ? 'active' : ''}`} onClick={() => setTab('trash')}>回收站</button>
-        <button className={`admin-tab ${tab === 'audit' ? 'active' : ''}`} onClick={() => setTab('audit')}>审计日志</button>
-        <button className={`admin-tab ${tab === 'login' ? 'active' : ''}`} onClick={() => setTab('login')}>登录日志</button>
-        <button className={`admin-tab ${tab === 'backup' ? 'active' : ''}`} onClick={() => setTab('backup')}>数据备份</button>
+        <button className={`admin-tab ${tab === 'documents' ? 'active' : ''}`} onClick={() => setTab('documents')}>{t('admin.documents')}</button>
+        <button className={`admin-tab ${tab === 'users' ? 'active' : ''}`} onClick={() => setTab('users')}>{t('admin.users')}</button>
+        <button className={`admin-tab ${tab === 'trash' ? 'active' : ''}`} onClick={() => setTab('trash')}>{t('admin.trash')}</button>
+        <button className={`admin-tab ${tab === 'audit' ? 'active' : ''}`} onClick={() => setTab('audit')}>{t('admin.audit')}</button>
+        <button className={`admin-tab ${tab === 'login' ? 'active' : ''}`} onClick={() => setTab('login')}>{t('admin.loginLogs')}</button>
+        <button className={`admin-tab ${tab === 'backup' ? 'active' : ''}`} onClick={() => setTab('backup')}>{t('admin.backup')}</button>
       </div>
 
       {/* 文档管理表格 */}

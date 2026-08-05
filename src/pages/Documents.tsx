@@ -16,6 +16,7 @@ import BookmarkButton from '@/components/BookmarkButton'
 import UploadDialog from '@/components/UploadDialog'
 import { useAuthStore } from '@/store/auth'
 import { isAdmin } from '@/types/user'
+import { useT } from '@/i18n'
 import { getFileTypeLabel, formatSize, formatDate } from '@/utils/fileType'
 
 type FilterType = FileType | 'all' | 'bookmarks'
@@ -34,20 +35,20 @@ interface ContextMenuState {
   moveToOpen?: boolean
 }
 
-const FILTERS: { value: FilterType; label: string }[] = [
-  { value: 'all', label: '全部' },
-  { value: 'bookmarks', label: '书签' },
-  { value: 'pdf', label: 'PDF' },
-  { value: 'docx', label: 'Word' },
-  { value: 'xlsx', label: 'Excel' },
-  { value: 'pptx', label: 'PPT' },
-  { value: 'image', label: '图片' },
-  { value: 'markdown', label: 'Markdown' },
-  { value: 'text', label: '文本' },
-]
-
 // 文档列表页（含文件夹功能 + 键盘导航 + 拖拽 + 右键菜单）
 export default function Documents() {
+  const t = useT()
+  const FILTERS: { value: FilterType; label: string }[] = [
+    { value: 'all', label: t('doc.all') },
+    { value: 'bookmarks', label: t('doc.bookmarks') },
+    { value: 'pdf', label: 'PDF' },
+    { value: 'docx', label: 'Word' },
+    { value: 'xlsx', label: 'Excel' },
+    { value: 'pptx', label: 'PPT' },
+    { value: 'image', label: '图片' },
+    { value: 'markdown', label: 'Markdown' },
+    { value: 'text', label: '文本' },
+  ]
   const navigate = useNavigate()
   const [docs, setDocs] = useState<Document[]>([])
   const [bookmarkDocs, setBookmarkDocs] = useState<Document[]>([])
@@ -437,7 +438,7 @@ export default function Documents() {
         <div className="global-search-wrap" ref={searchRef}>
           <input
             className="search-input global-search-input"
-            placeholder="全文搜索..."
+            placeholder={t('doc.search')}
             value={searchQuery}
             onChange={(e) => { setSearchQuery(e.target.value); if (!e.target.value.trim()) { setSearchResults([]); setSearchOpen(false) } }}
             onKeyDown={handleSearchKeyDown}
@@ -450,9 +451,9 @@ export default function Documents() {
           {searchOpen && (
             <div className="search-results-dropdown">
               {searching ? (
-                <div className="search-results-empty">搜索中...</div>
+                <div className="search-results-empty">{t('doc.searching')}</div>
               ) : searchResults.length === 0 ? (
-                <div className="search-results-empty">无结果</div>
+                <div className="search-results-empty">{t('doc.noResult')}</div>
               ) : (
                 searchResults.map((r) => (
                   <button key={`${r.type}-${r.id}`} className="search-result-item" onClick={() => handleSearchResultClick(r)}>
@@ -482,14 +483,14 @@ export default function Documents() {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M9 11l3 3L22 4" /><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
           </svg>
-          {selectMode ? '取消选择' : '选择'}
+          {selectMode ? t('doc.cancelSelect') : t('doc.select')}
         </button>
         {selectMode && selectedIds.size > 0 && (
-          <button className="btn-ghost" onClick={selectAll}>全选</button>
+          <button className="btn-ghost" onClick={selectAll}>{t('doc.selectAll')}</button>
         )}
         <input
           className="search-input"
-          placeholder="过滤文档..."
+          placeholder={t('doc.filter')}
           value={keyword}
           onChange={(e) => { setKeyword(e.target.value); setFocusIndex(-1) }}
         />
@@ -537,8 +538,8 @@ export default function Documents() {
           value={sort}
           onChange={(e) => setSort(e.target.value as 'updated' | 'title')}
         >
-          <option value="updated">最近更新</option>
-          <option value="title">标题排序</option>
+          <option value="updated">{t('doc.sortRecent')}</option>
+          <option value="title">{t('doc.sortTitle')}</option>
         </select>
         <div className="view-toggle">
           <button className={`vt-btn ${viewMode === 'grid' ? 'vt-btn--active' : ''}`} onClick={() => setViewMode('grid')} title="网格视图">
@@ -563,7 +564,7 @@ export default function Documents() {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M3 6h18" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
             </svg>
-            回收站
+            {t('doc.trash')}
           </button>
         )}
         {canUpload && (
@@ -596,9 +597,9 @@ export default function Documents() {
             <span className="doc-list-cell doc-list-cell--actions" />
           </div>
           {trashLoading ? (
-            <div className="documents-status">加载中...</div>
+            <div className="documents-status">{t('doc.loading')}</div>
           ) : trashDocs.length === 0 ? (
-            <div className="documents-status">回收站为空</div>
+            <div className="documents-status">{t('doc.trashEmpty')}</div>
           ) : (
             trashDocs.map((d) => (
               <div key={d.id} className="doc-list-row">
@@ -624,11 +625,11 @@ export default function Documents() {
           )}
         </div>
       ) : loading ? (
-        <div className="documents-status">加载中...</div>
+        <div className="documents-status">{t('doc.loading')}</div>
       ) : error ? (
-        <div className="documents-status">文档加载失败，请稍后重试</div>
+        <div className="documents-status">{t('doc.loadFailed')}</div>
       ) : filtered.length === 0 && filteredFolders.length === 0 ? (
-        <div className="documents-status">未找到匹配的内容</div>
+        <div className="documents-status">{t('doc.empty')}</div>
       ) : viewMode === 'list' ? (
         <div className="doc-list">
           <div className="doc-list-header">

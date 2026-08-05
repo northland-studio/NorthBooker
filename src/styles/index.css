@@ -239,6 +239,26 @@ button {
 }
 
 /* 主题切换按钮 */
+.navbar-lang-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 8px;
+  border-radius: 10px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.navbar-lang-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
 .theme-toggle {
   display: inline-flex;
   align-items: center;

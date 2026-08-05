@@ -25,6 +25,7 @@ import { fetchSubscriptions, subscribe, unsubscribe } from '@/api/subscriptions'
 import { fetchAnnotations, addAnnotation, deleteAnnotation, type Annotation } from '@/api/annotations'
 import { useAuthStore } from '@/store/auth'
 import { isAdmin } from '@/types/user'
+import { useT } from '@/i18n'
 import { useThemeStore } from '@/store/theme'
 import { formatDate } from '@/utils/fileType'
 import DocSearch from '@/components/DocSearch'
@@ -394,6 +395,7 @@ const annotationHighlightExtension = Extension.create({
 export default function PageEditor() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const t = useT()
   const user = useAuthStore((s) => s.user)
   const theme = useThemeStore((s) => s.theme)
   const [title, setTitle] = useState('')
@@ -1208,7 +1210,7 @@ export default function PageEditor() {
                 <path d="M16 3h5v5" /><path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-3" />
                 <path d="M3 21l6-6" /><path d="M21 3l-8 8" />
               </svg>
-              片段批注
+              {t('editor.annotations')}
             </h3>
             <button className="comment-panel-close" onClick={() => setShowAnnotations(false)} aria-label="关闭">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1266,12 +1268,12 @@ export default function PageEditor() {
       <div className={`comment-panel version-panel ${showVersions ? 'comment-panel--open' : ''}`}>
         <div className="comment-panel-header">
           <h3>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-            版本历史
-          </h3>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+              {t('editor.versions')}
+            </h3>
           <button className="comment-panel-close" onClick={() => { setShowVersions(false); setRestoreConfirmId(null); setComparingVersion(null) }} aria-label="关闭">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <line x1="18" y1="6" x2="6" y2="18" />
@@ -1343,7 +1345,7 @@ export default function PageEditor() {
         <div className="dialog-mask" onClick={() => setShowShortcuts(false)}>
           <div className="dialog-card shortcuts-card" onClick={(e) => e.stopPropagation()}>
             <div className="dialog-header">
-              <h3>键盘快捷键</h3>
+              <h3>{t('editor.shortcuts')}</h3>
               <button className="dialog-close" onClick={() => setShowShortcuts(false)} aria-label="关闭">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -1463,7 +1465,7 @@ export default function PageEditor() {
               if (!showVersions) loadVersions()
               setShowVersions(!showVersions)
             }}
-            title="版本历史"
+            title={t('editor.versions')}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="10" />
@@ -1493,7 +1495,7 @@ export default function PageEditor() {
             </button>
           )}
           <span className="pe-sep" />
-          <button className={`pe-share-btn ${copied ? 'pe-share-btn--copied' : ''}`} onClick={handleShare} title="复制链接">
+          <button className={`pe-share-btn ${copied ? 'pe-share-btn--copied' : ''}`} onClick={handleShare} title={t('editor.copyLink')}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               {copied ? (
                 <polyline points="20 6 9 17 4 12" />
@@ -1511,7 +1513,7 @@ export default function PageEditor() {
           <button
             className="pe-share-btn"
             onClick={() => setShowShare(true)}
-            title="生成分享链接"
+            title={t('editor.share')}
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -1522,7 +1524,7 @@ export default function PageEditor() {
           <button
             className={`pe-share-btn ${showSearch ? 'pe-btn--active' : ''}`}
             onClick={() => setShowSearch(!showSearch)}
-            title="搜索"
+            title={t('editor.search')}
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="11" cy="11" r="8" />
@@ -1563,7 +1565,7 @@ export default function PageEditor() {
               <span className="diff-stat diff-stat--add">+{diffStats.add} 字</span>
               <span className="diff-stat diff-stat--del">-{diffStats.del} 字</span>
               <span className="pe-bottom-diff-time">{formatDate(comparingVersion.createdAt)}</span>
-              <button className="version-info-bar-exit" onClick={exitCompare}>退出对比</button>
+              <button className="version-info-bar-exit" onClick={exitCompare}>{t('editor.exitCompare')}</button>
             </span>
           )}
         </div>
@@ -1572,7 +1574,7 @@ export default function PageEditor() {
             <button
               className={`pe-share-btn ${subscribed ? 'pe-btn--active pe-sub-active' : ''}`}
               onClick={toggleSubscribe}
-              title={subscribed ? '取消订阅（更新后邮件通知）' : '订阅更新（更新后邮件通知）'}
+              title={subscribed ? t('editor.unsubscribe') : t('editor.subscribe')}
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
@@ -1583,7 +1585,7 @@ export default function PageEditor() {
           <button
             className={`pe-share-btn ${showAnnotations ? 'pe-btn--active' : ''}`}
             onClick={() => setShowAnnotations(!showAnnotations)}
-            title="片段批注"
+            title={t('editor.annotations')}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -1596,7 +1598,7 @@ export default function PageEditor() {
             <button
               className={`pe-share-btn ${showComments ? 'pe-btn--active' : ''}`}
               onClick={() => setShowComments(!showComments)}
-              title="评论"
+              title={t('editor.comments')}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />

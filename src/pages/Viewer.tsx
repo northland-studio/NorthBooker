@@ -8,6 +8,7 @@ import { resolveUri } from '@/utils/url'
 import { createShareLink } from '@/api/share'
 import BookmarkButton from '@/components/BookmarkButton'
 import CommentPanel from '@/components/CommentPanel'
+import { useT } from '@/i18n'
 import type { Document, FileType } from '@/types/document'
 import type { PreviewDocument } from '@doc-preview/core'
 
@@ -28,6 +29,7 @@ export default function Viewer() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const theme = useThemeStore((s) => s.theme)
+  const t = useT()
   const [doc, setDoc] = useState<Document | null>(null)
   const [error, setError] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -129,10 +131,10 @@ export default function Viewer() {
     return (
       <div className="viewer-status-wrap">
         <div className="viewer-status-card">
-          <h2>文档不存在</h2>
-          <p>该文档可能已被删除或不可访问</p>
+          <h2>{t('viewer.notFound')}</h2>
+          <p>{t('viewer.notFoundDesc')}</p>
           <button className="btn-primary" onClick={() => navigate('/')}>
-            返回列表
+            {t('viewer.backToList')}
           </button>
         </div>
       </div>
@@ -151,7 +153,7 @@ export default function Viewer() {
             <line x1="19" y1="12" x2="5" y2="12" />
             <polyline points="12 19 5 12 12 5" />
           </svg>
-          返回
+          {t('viewer.back')}
         </button>
         <div className="viewer-info">
           <span className="viewer-title">{doc.title}</span>
@@ -174,14 +176,14 @@ export default function Viewer() {
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
               </svg>
             )}
-            <span>{copied ? '已复制' : '转发'}</span>
+            <span>{copied ? t('viewer.copied') : t('viewer.forward')}</span>
           </button>
           <button className="viewer-share" onClick={handleShareOpen} aria-label="分享">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" />
               <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" /><line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
             </svg>
-            <span>分享</span>
+            <span>{t('viewer.share')}</span>
           </button>
         </div>
       </div>
@@ -203,7 +205,7 @@ export default function Viewer() {
       <button
         className={`comment-fab ${showComments ? 'comment-fab--active' : ''}`}
         onClick={() => setShowComments(!showComments)}
-        title="评论"
+        title={t('viewer.comment')}
       >
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
