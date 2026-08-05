@@ -2,6 +2,7 @@ import { Router } from 'express'
 import crypto from 'node:crypto'
 import { oauthConfig, verifyXuanjianToken, invalidateToken } from '../oauth.js'
 import { authMiddleware } from '../middleware/auth.js'
+import { logLogin } from '../audit.js'
 import logger from '../logger.js'
 
 const router = Router()
@@ -108,6 +109,10 @@ router.get('/callback', async (req, res) => {
 
   // 拉取一次用户信息，便于前端立即展示（可选）
   const xjUser = await verifyXuanjianToken(accessToken)
+
+  // 记录登录日志（成功）
+  const ip = (req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || '').trim()
+  logLogin({ id: null, username: xjUser?.username || 'unknown' }, ip, req.headers['user-agent'] || '', true)
 
   // Electron 桌面端：redirect 指向本地回调服务器时，用 query 参数传 token
   // （URL fragment 不会发送到服务器，本地 HTTP 服务器无法读取）

@@ -1,8 +1,14 @@
 import { Router } from 'express'
+import fs from 'node:fs'
+import path from 'node:path'
+import os from 'node:os'
+import { fileURLToPath } from 'node:url'
 import db from '../database.js'
 import { authMiddleware, adminMiddleware } from '../middleware/auth.js'
 import { deleteFile, parseKeyFromUrl, signPrivateUri } from '../qiniu.js'
 import logger from '../logger.js'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 const router = Router()
 
@@ -100,6 +106,75 @@ router.delete('/documents/:id', async (req, res) => {
 
   db.prepare('DELETE FROM documents WHERE id = ?').run(req.params.id)
   res.json({ ok: true })
+})
+
+// 审计日志（分页）
+router.get('/audit-logs', (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 50, 200)
+  const offset = Number(req.query.offset) || 0
+  const rows = db.prepare(
+    'SELECT * FROM audit_logs ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?',
+  ).all(limit, offset)
+  const total = db.prepare('SELECT COUNT(*) AS c FROM audit_logs').get().c
+  res.json({ rows, total })
+})
+
+// 登录日志（分页）
+router.get('/login-logs', (req, res) => {
+  const limit = Math.min(Number(req.query.limit) || 50, 200)
+  const offset = Number(req.query.offset) || 0
+  const rows = db.prepare(
+    'SELECT * FROM login_logs ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?',
+  ).all(limit, offset)
+  const total = db.prepare('SELECT COUNT(*) AS c FROM login_logs').get().c
+  res.json({ rows, total })
+})
+
+// 数据备份：VACUUM INTO 生成 SQLite 快照下载
+router.get('/backup', (req, res) => {
+  const tmpFile = path.join(os.tmpdir(), `northbooker-backup-${Date.now()}.sqlite`)
+  try {
+    db.prepare(`VACUUM INTO '${tmpFile.replace(/'/g, "''")}'`).run()
+    const name = `northbooker-backup-${new Date().toISOString().slice(0, 10)}.sqlite`
+    res.download(tmpFile, name, () => {
+      fs.unlink(tmpFile, () => {})
+    })
+    logger.info('admin', '已生成数据库备份', { user: req.user?.username })
+  } catch (err) {
+    logger.error('admin', '备份失败', { error: err.message })
+    res.status(500).json({ error: '备份失败' })
+  }
+})
+
+// 数据迁移：导出全部文档与在线文档（JSON）
+router.get('/export-all', (req, res) => {
+  try {
+    const documents = db.prepare('SELECT * FROM documents ORDER BY updated_at DESC').all()
+    const users = db.prepare('SELECT id, xuanjian_id, username, avatar, level, contribution, email, created_at FROM users').all()
+    const pages = db.prepare(
+      `SELECT p.id, p.title, p.content, p.parent_id, p.sort_order, p.author_id, p.visibility, p.tags, p.created_at, p.updated_at,
+              u.username AS author_name
+       FROM pages p LEFT JOIN users u ON u.id = p.author_id
+       ORDER BY p.updated_at DESC`,
+    ).all()
+    const folders = db.prepare('SELECT * FROM folders').all()
+    const payload = {
+      app: 'northbooker',
+      version: '2.6.0',
+      exported_at: new Date().toISOString(),
+      users,
+      folders,
+      documents,
+      pages,
+    }
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.setHeader('Content-Disposition', `attachment; filename="northbooker-export-${new Date().toISOString().slice(0, 10)}.json"`)
+    res.send(JSON.stringify(payload, null, 2))
+    logger.info('admin', '已导出全部数据', { user: req.user?.username })
+  } catch (err) {
+    logger.error('admin', '导出失败', { error: err.message })
+    res.status(500).json({ error: '导出失败' })
+  }
 })
 
 export default router

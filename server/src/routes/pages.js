@@ -2,6 +2,8 @@ import { Router } from 'express'
 import crypto from 'node:crypto'
 import db from '../database.js'
 import { authMiddleware, optionalAuthMiddleware } from '../middleware/auth.js'
+import { notifyPageUpdate } from '../mail.js'
+import { logAudit } from '../audit.js'
 import bus from '../bus.js'
 
 const router = Router()
@@ -59,8 +61,8 @@ router.get('/tree', optionalAuthMiddleware, (req, res) => {
     // 只看我自己的文档（不论公开/私有）
     rows = db
       .prepare(
-        `SELECT p.id, p.title, p.content, p.parent_id, p.sort_order, p.visibility,
-                p.created_at, p.updated_at, p.author_id,
+        `SELECT p.id, p.title, p.content, p.parent_id, p.sort_order, p.visibility, p.tags,
+        p.created_at, p.updated_at, p.author_id,
                 u.username AS author_name, u.avatar AS author_avatar
          FROM pages p
          LEFT JOIN users u ON u.id = p.author_id
@@ -72,8 +74,8 @@ router.get('/tree', optionalAuthMiddleware, (req, res) => {
     // 已登录：看公开文档 + 自己的私有文档
     rows = db
       .prepare(
-        `SELECT p.id, p.title, p.content, p.parent_id, p.sort_order, p.visibility,
-                p.created_at, p.updated_at, p.author_id,
+        `SELECT p.id, p.title, p.content, p.parent_id, p.sort_order, p.visibility, p.tags,
+        p.created_at, p.updated_at, p.author_id,
                 u.username AS author_name, u.avatar AS author_avatar
          FROM pages p
          LEFT JOIN users u ON u.id = p.author_id
@@ -85,8 +87,8 @@ router.get('/tree', optionalAuthMiddleware, (req, res) => {
     // 未登录：只看公开文档
     rows = db
       .prepare(
-        `SELECT p.id, p.title, p.content, p.parent_id, p.sort_order, p.visibility,
-                p.created_at, p.updated_at, p.author_id,
+        `SELECT p.id, p.title, p.content, p.parent_id, p.sort_order, p.visibility, p.tags,
+        p.created_at, p.updated_at, p.author_id,
                 u.username AS author_name, u.avatar AS author_avatar
          FROM pages p
          LEFT JOIN users u ON u.id = p.author_id
@@ -184,15 +186,19 @@ router.put('/:id', authMiddleware, (req, res) => {
     pruneVersions(req.params.id)
   }
 
-  const { title, content, parentId, visibility } = req.body
+  const { title, content, parentId, visibility, tags } = req.body
   const now = new Date().toISOString()
   db.prepare(
     `UPDATE pages SET title = COALESCE(?, title), content = COALESCE(?, content),
      parent_id = COALESCE(?, parent_id), visibility = COALESCE(?, visibility),
+     tags = COALESCE(?, tags),
      updated_at = ?
      WHERE id = ?`,
-  ).run(title ?? null, content ?? null, parentId ?? null, visibility ?? null, now, req.params.id)
+  ).run(title ?? null, content ?? null, parentId ?? null, visibility ?? null, Array.isArray(tags) ? tags.filter(Boolean).slice(0, 10).join(',') : null, now, req.params.id)
   bus.emit('page:updated', { pageId: req.params.id })
+  // 订阅邮件通知（仅在线文档，使用更新后的标题）
+  const finalRow = db.prepare('SELECT title FROM pages WHERE id = ?').get(req.params.id)
+  notifyPageUpdate({ id: page.id, title: finalRow?.title || page.title }, req.user.username, `https://northbooker.xuanjian.top/pages/${page.id}`).catch(() => {})
   res.json({ success: true, updated_at: now })
 })
 
@@ -206,6 +212,8 @@ router.delete('/:id', authMiddleware, (req, res) => {
 
   db.prepare('UPDATE pages SET parent_id = NULL WHERE parent_id = ?').run(req.params.id)
   db.prepare('DELETE FROM pages WHERE id = ?').run(req.params.id)
+  db.prepare('DELETE FROM subscriptions WHERE target_type = ? AND target_id = ?').run('page', req.params.id)
+  logAudit(req.user, 'delete_page', page.title, `删除在线文档: ${req.params.id}`)
   res.json({ success: true })
 })
 

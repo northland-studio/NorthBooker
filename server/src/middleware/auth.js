@@ -17,14 +17,15 @@ export async function authMiddleware(req, res, next) {
   // 同步到本地 users 表（首次登录则创建）
   const now = new Date().toISOString()
   db.prepare(
-    `INSERT INTO users (xuanjian_id, username, avatar, level, contribution, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)
+    `INSERT INTO users (xuanjian_id, username, avatar, level, contribution, email, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(xuanjian_id) DO UPDATE SET
        username = excluded.username,
        avatar = excluded.avatar,
        level = excluded.level,
-       contribution = excluded.contribution`,
-  ).run(xjUser.id, xjUser.username, xjUser.avatar || null, xjUser.level || 0, xjUser.contribution || 0, now)
+       contribution = excluded.contribution,
+       email = COALESCE(excluded.email, users.email)`,
+  ).run(xjUser.id, xjUser.username, xjUser.avatar || null, xjUser.level || 0, xjUser.contribution || 0, xjUser.email || null, now)
 
   // 查出本地 id（用于 owner_id 关联）
   const local = db.prepare('SELECT id FROM users WHERE xuanjian_id = ?').get(xjUser.id)

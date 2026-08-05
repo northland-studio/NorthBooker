@@ -16,6 +16,7 @@ import downloadRouter from './routes/download.js'
 import searchRouter from './routes/search.js'
 import shareRouter from './routes/share.js'
 import subscriptionsRouter from './routes/subscriptions.js'
+import annotationsRouter from './routes/annotations.js'
 
 const app = express()
 
@@ -56,6 +57,7 @@ app.use('/api/download', downloadRouter)
 app.use('/api/search', searchRouter)
 app.use('/api/share', shareRouter)
 app.use('/api/subscriptions', subscriptionsRouter)
+app.use('/api/annotations', annotationsRouter)
 
 // 健康检查
 app.get('/api/health', (req, res) => {

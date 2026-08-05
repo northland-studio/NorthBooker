@@ -131,6 +131,44 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, target_type, target_id)
   );
+
+  -- 在线文档片段批注（仅在线文档 pages）
+  CREATE TABLE IF NOT EXISTS page_annotations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    page_id TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    start_pos INTEGER NOT NULL,
+    end_pos INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    content TEXT NOT NULL DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(page_id) REFERENCES pages(id) ON DELETE CASCADE,
+    FOREIGN KEY(user_id) REFERENCES users(id)
+  );
+
+  -- 管理员审计日志
+  CREATE TABLE IF NOT EXISTS audit_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    username TEXT,
+    action TEXT NOT NULL,
+    target TEXT,
+    detail TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at);
+
+  -- 登录日志
+  CREATE TABLE IF NOT EXISTS login_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
+    username TEXT,
+    ip TEXT,
+    ua TEXT,
+    success INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_login_logs_created ON login_logs(created_at);
 `)
 
 // 迁移：为已有的 page_fts 重新索引全部 pages（仅当 FTS 表为空时）
@@ -161,6 +199,34 @@ try {
 try {
   db.exec('ALTER TABLE documents ADD COLUMN folder_id TEXT REFERENCES folders(id)')
   logger.info('db', '已迁移 documents.folder_id 列')
+} catch {
+  // 列已存在则跳过
+}
+
+// 迁移：documents.tags（标签，逗号分隔）+ deleted_at（软删除，2.6.0+）
+try {
+  db.exec("ALTER TABLE documents ADD COLUMN tags TEXT NOT NULL DEFAULT ''")
+  logger.info('db', '已迁移 documents.tags 列')
+} catch {
+  // 列已存在则跳过
+}
+try {
+  db.exec('ALTER TABLE documents ADD COLUMN deleted_at TEXT')
+  logger.info('db', '已迁移 documents.deleted_at 列')
+} catch {
+  // 列已存在则跳过
+}
+// 迁移：pages.tags（标签，2.6.0+）
+try {
+  db.exec("ALTER TABLE pages ADD COLUMN tags TEXT NOT NULL DEFAULT ''")
+  logger.info('db', '已迁移 pages.tags 列')
+} catch {
+  // 列已存在则跳过
+}
+// 迁移：users.email（订阅邮件通知，2.6.0+）
+try {
+  db.exec('ALTER TABLE users ADD COLUMN email TEXT')
+  logger.info('db', '已迁移 users.email 列')
 } catch {
   // 列已存在则跳过
 }
