@@ -73,9 +73,8 @@ router.get('/verify', async (req, res) => {
   db.prepare('UPDATE users SET email = ? WHERE id = ?').run(row.email, row.user_id)
   db.prepare('UPDATE email_verifications SET used = 1 WHERE token = ?').run(token)
   logger.info('mail', '邮箱绑定成功', { userId: row.user_id, email: row.email })
-  page('绑定成功', `<h2 style="color:#004AAD;margin:0 0 12px">邮箱绑定成功</h2>
-    <p style="color:#666;line-height:1.8;margin:0 0 20px">已为你的账号绑定<br><strong style="color:#1a1b1d">${row.email}</strong><br><span style="font-size:12px;color:#9ca3af">现在可以返回北牖继续使用</span></p>
-    <a href="/" style="display:inline-block;padding:11px 32px;background:#004AAD;color:#fff;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600">返回北牖</a>`)
+  // 回跳前端（携带 email_verified 参数），前端刷新用户信息后不再弹出绑定提示
+  res.redirect(`${req.protocol}://${req.get('host')}/?email_verified=1`)
 })
 
 export default router
