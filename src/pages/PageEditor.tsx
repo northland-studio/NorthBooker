@@ -76,10 +76,6 @@ function htmlToText(html: string): string {
   return (tmp.textContent || '').replace(/\u00a0/g, ' ')
 }
 
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
-
 // 字符级 diff：公共前后缀 + 中间差异段（用于修改行精确统计与渲染）
 function charDiffSegments(oldText: string, newText: string): DiffSegment[] {
   const a = oldText
@@ -155,62 +151,6 @@ function diffTextLines(oldText: string, newText: string): DiffLine[] {
     merged.push(cur)
   }
   return merged
-}
-
-// 将 diff 结果应用到版本 HTML：在正文块内直接高亮（新增绿 / 删除红 / 修改黄）
-function applyDiffToHtml(baseHtml: string, lines: DiffLine[]): string {
-  const container = document.createElement('div')
-  container.innerHTML = baseHtml || ''
-  const curLines = lines.filter((l) => l.type !== 'del')
-  let idx = 0
-  let pendingDels: string[] = []
-
-  const flushDels = (refEl: HTMLElement) => {
-    if (!pendingDels.length) return
-    for (const d of pendingDels) {
-      const el = document.createElement('div')
-      el.className = 'vdl-inline-del-row'
-      el.textContent = d
-      refEl.before(el)
-    }
-    pendingDels = []
-  }
-
-  const markLeaf = (el: HTMLElement) => {
-    const text = (el.textContent || '').replace(/\u00a0/g, ' ').trim()
-    if (!text) return
-    const line = curLines[idx]
-    if (!line || line.text.trim() !== text) return
-    if (line.type === 'add') {
-      flushDels(el)
-      el.innerHTML = `<span class="vdl-inline-add">${escapeHtml(el.textContent || '')}</span>`
-    } else if (line.type === 'mod' && line.segments) {
-      flushDels(el)
-      const inner = line.segments
-        .map((s) => {
-          if (s.type === 'same') return escapeHtml(s.text)
-          if (s.type === 'del') return `<span class="vdl-inline-del">${escapeHtml(s.text)}</span>`
-          return `<span class="vdl-inline-add">${escapeHtml(s.text)}</span>`
-        })
-        .join('')
-      el.innerHTML = `<span class="vdl-inline-mod">${inner}</span>`
-    }
-    idx++
-  }
-
-  const walk = (node: HTMLElement) => {
-    for (const child of Array.from(node.children)) {
-      const h = child as HTMLElement
-      if (h.children.length > 0) {
-        markLeaf(h)
-        walk(h)
-      } else {
-        markLeaf(h)
-      }
-    }
-  }
-  walk(container)
-  return container.innerHTML
 }
 
 // 判断文本是否含足够中文（与主进程 hasChinese 一致）
@@ -297,6 +237,69 @@ const ttsHighlightExtension = Extension.create({
     return [ttsHighlightPlugin]
   },
 })
+
+// ===== 版本对比高亮 Decoration 插件（模块级状态，类 TTS 朗读高亮） =====
+let diffHighlightRanges: { from: number; to: number; type: 'add' | 'mod' }[] = []
+
+const diffHighlightPlugin = new Plugin({
+  key: new PluginKey('diffHighlight'),
+  state: {
+    init: () => DecorationSet.empty,
+    apply(tr, set) {
+      if (tr.getMeta('diffHighlight') !== undefined) {
+        if (!diffHighlightRanges.length) return DecorationSet.empty
+        const decos: Decoration[] = []
+        for (const r of diffHighlightRanges) {
+          tr.doc.nodesBetween(r.from, r.to, (node: any, pos: number) => {
+            if (!node.isText) return true
+            const nFrom = Math.max(r.from, pos)
+            const nTo = Math.min(r.to, pos + node.nodeSize)
+            if (nTo > nFrom) {
+              decos.push(Decoration.inline(nFrom, nTo, { class: r.type === 'add' ? 'diff-read-add' : 'diff-read-mod' }))
+            }
+            return true
+          })
+        }
+        return DecorationSet.create(tr.doc, decos)
+      }
+      return set.map(tr.mapping, tr.doc)
+    },
+  },
+  props: {
+    decorations(state) {
+      return this.getState(state)
+    },
+  },
+})
+
+const diffHighlightExtension = Extension.create({
+  name: 'diffHighlight',
+  addProseMirrorPlugins() {
+    return [diffHighlightPlugin]
+  },
+})
+
+// 将 cur 侧 diff 行（add/mod）映射到文档块级 pos 范围（用于正文内高亮）
+function mapDiffToPositions(doc: any, curLines: DiffLine[]): { from: number; to: number; type: 'add' | 'mod' }[] {
+  const ranges: { from: number; to: number; type: 'add' | 'mod' }[] = []
+  let i = 0
+  doc.descendants((node: any, pos: number) => {
+    if (node.isBlock && node.textContent) {
+      const text = node.textContent.replace(/\u00a0/g, ' ')
+      const line = curLines[i]
+      if (line && line.text.trim() === text.trim()) {
+        if (line.type === 'add' || line.type === 'mod') {
+          const from = pos + 1
+          const to = pos + node.nodeSize - 1
+          if (to > from) ranges.push({ from, to, type: line.type })
+        }
+        i++
+      }
+    }
+    return true
+  })
+  return ranges
+}
 
 // 在线文档编辑器
 export default function PageEditor() {
@@ -392,6 +395,7 @@ export default function PageEditor() {
       TableCell,
       TableHeader,
       ttsHighlightExtension,
+      diffHighlightExtension,
     ],
     onUpdate: ({ editor: ed }) => {
       scheduleSave()
@@ -573,19 +577,24 @@ export default function PageEditor() {
       }
     }
     setDiffStats({ add, del })
-    // 临时替换正文为「版本内容 + 差异高亮」，退出对比时恢复
+    // 临时替换正文为该版本内容，并在正文内以 Decoration 高亮差异（类 TTS 朗读高亮）
     if (diffBaseHtmlRef.current === null) diffBaseHtmlRef.current = editor.getHTML()
     comparingRef.current = true
-    editor.commands.setContent(applyDiffToHtml(v.content || '', lines))
+    editor.commands.setContent(v.content || '')
+    const curLines = lines.filter((l) => l.type !== 'del')
+    diffHighlightRanges = mapDiffToPositions(editor.state.doc, curLines)
+    editor.view.dispatch(editor.state.tr.setMeta('diffHighlight', true))
     editor.setEditable(false)
     setComparingVersion(v)
     setShowVersions(false)
   }
 
-  // 退出对比：恢复原正文与编辑状态
+  // 退出对比：清除高亮并恢复原正文与编辑状态
   const exitCompare = () => {
     if (!editor) return
     comparingRef.current = false
+    diffHighlightRanges = []
+    editor.view.dispatch(editor.state.tr.setMeta('diffHighlight', true))
     if (diffBaseHtmlRef.current !== null) {
       editor.commands.setContent(diffBaseHtmlRef.current)
       diffBaseHtmlRef.current = null
@@ -859,6 +868,21 @@ export default function PageEditor() {
           </span>
           {saving && <span className="page-editor-saving">保存中...</span>}
         </div>
+        {/* 目录按钮 */}
+        <button
+          className={`pe-btn pe-toc-btn ${showToc ? 'pe-btn--active' : ''}`}
+          onClick={() => setShowToc(!showToc)}
+          title="目录"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="8" y1="6" x2="21" y2="6" />
+            <line x1="8" y1="12" x2="21" y2="12" />
+            <line x1="8" y1="18" x2="21" y2="18" />
+            <line x1="3" y1="6" x2="3.01" y2="6" />
+            <line x1="3" y1="12" x2="3.01" y2="12" />
+            <line x1="3" y1="18" x2="3.01" y2="18" />
+          </svg>
+        </button>
         {canEdit && (
           <PageEditorMenu editor={editor} />
         )}
@@ -887,15 +911,6 @@ export default function PageEditor() {
           </aside>
         )}
         <div className="page-editor-main">
-          {comparingVersion && (
-            <div className="version-info-bar">
-              <span className="version-info-bar-title">版本 {comparingVersion.version}</span>
-              <span className="diff-stat diff-stat--add">+{diffStats.add} 字</span>
-              <span className="diff-stat diff-stat--del">-{diffStats.del} 字</span>
-              <span className="version-info-bar-time">{formatDate(comparingVersion.createdAt)}</span>
-              <button className="version-info-bar-exit" onClick={exitCompare}>退出对比</button>
-            </div>
-          )}
           <input
             className="page-editor-title-input"
             type="text"
@@ -904,6 +919,15 @@ export default function PageEditor() {
             placeholder="无标题文档"
             readOnly={!canEdit || !!comparingVersion}
           />
+          {comparingVersion && (
+            <div className="version-info-bar">
+              <span className="version-info-bar-title">版本 {versions.length - versions.findIndex((x) => x.id === comparingVersion.id)}</span>
+              <span className="diff-stat diff-stat--add">+{diffStats.add} 字</span>
+              <span className="diff-stat diff-stat--del">-{diffStats.del} 字</span>
+              <span className="version-info-bar-time">{formatDate(comparingVersion.createdAt)}</span>
+              <button className="version-info-bar-exit" onClick={exitCompare}>退出对比</button>
+            </div>
+          )}
           <div className={`page-editor-wrapper ${!canEdit || comparingVersion ? 'page-editor-wrapper--readonly' : ''}`}>
             <EditorContent editor={editor} />
           </div>
@@ -948,7 +972,7 @@ export default function PageEditor() {
                   <div key={v.id} className="version-item">
                     <div className="version-info">
                       <div className="version-header">
-                        <span className="version-number">版本 {v.version}</span>
+                        <span className="version-number">版本 {versions.length - versions.findIndex((x) => x.id === v.id)}</span>
                         {v.isRollback && <span className="version-rollback-badge">已恢复</span>}
                       </div>
                       <div className="version-meta">
@@ -1078,20 +1102,6 @@ export default function PageEditor() {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <circle cx="12" cy="12" r="10" />
               <polyline points="12 6 12 12 16 14" />
-            </svg>
-          </button>
-          <button
-            className={`pe-btn pe-toc-btn ${showToc ? 'pe-btn--active' : ''}`}
-            onClick={() => setShowToc(!showToc)}
-            title="目录"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <line x1="8" y1="6" x2="21" y2="6" />
-              <line x1="8" y1="12" x2="21" y2="12" />
-              <line x1="8" y1="18" x2="21" y2="18" />
-              <line x1="3" y1="6" x2="3.01" y2="6" />
-              <line x1="3" y1="12" x2="3.01" y2="12" />
-              <line x1="3" y1="18" x2="3.01" y2="18" />
             </svg>
           </button>
           {isApp && ttsEnabled && (

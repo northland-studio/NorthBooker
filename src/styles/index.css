@@ -3109,31 +3109,16 @@ body.dark .tts-reading-highlight {
   padding: 12px 8px;
 }
 
-/* ===== 版本对比正文内高亮（直接在编辑器文本中标记，类 TTS 阅读高亮） ===== */
-.vdl-inline-add {
-  background: rgba(22, 163, 74, 0.18);
+/* ===== 版本对比正文内高亮（Decoration，类 TTS 朗读高亮） ===== */
+.diff-read-add {
+  background: rgba(22, 163, 74, 0.2);
   border-radius: 3px;
-  box-shadow: 0 0 0 1px rgba(22, 163, 74, 0.25);
+  box-shadow: 0 0 0 1px rgba(22, 163, 74, 0.28);
 }
-.vdl-inline-del {
-  background: rgba(220, 38, 38, 0.15);
-  color: #dc2626;
-  text-decoration: line-through;
+.diff-read-mod {
+  background: rgba(234, 179, 8, 0.25);
   border-radius: 3px;
-  box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.2);
-}
-.vdl-inline-mod {
-  background: rgba(234, 179, 8, 0.22);
-  border-radius: 3px;
-  box-shadow: 0 0 0 1px rgba(234, 179, 8, 0.3);
-}
-.vdl-inline-del-row {
-  color: #dc2626;
-  text-decoration: line-through;
-  background: rgba(220, 38, 38, 0.12);
-  border-radius: 4px;
-  padding: 2px 8px;
-  margin: 2px 0;
+  box-shadow: 0 0 0 1px rgba(234, 179, 8, 0.32);
 }
 
 /* 版本信息条（对比时显示在正文上方居中） */
