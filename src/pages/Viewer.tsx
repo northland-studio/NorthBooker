@@ -6,7 +6,6 @@ import { fetchDocumentById } from '@/api/documents'
 import { getFileTypeLabel, formatSize, formatDate } from '@/utils/fileType'
 import { resolveUri } from '@/utils/url'
 import { createShareLink } from '@/api/share'
-import { fetchSubscriptions, subscribe, unsubscribe } from '@/api/subscriptions'
 import BookmarkButton from '@/components/BookmarkButton'
 import CommentPanel from '@/components/CommentPanel'
 import type { Document, FileType } from '@/types/document'
@@ -46,12 +45,6 @@ export default function Viewer() {
   const [shareError, setShareError] = useState('')
   const [shareCopied, setShareCopied] = useState(false)
 
-  // 订阅
-  const [subscribed, setSubscribed] = useState(false)
-  const [subLoading, setSubLoading] = useState(false)
-  const [toast, setToast] = useState('')
-  const toastTimer = useRef<ReturnType<typeof setTimeout>>()
-
   useEffect(() => {
     setDoc(null)
     setError(false)
@@ -75,37 +68,6 @@ export default function Viewer() {
       .catch(() => setError(true))
       .finally(() => setLoading(false))
   }, [id])
-
-  // 检查订阅状态
-  useEffect(() => {
-    if (!id) return
-    fetchSubscriptions()
-      .then((subs) => setSubscribed(subs.some((s: any) => s.target_type === 'document' && s.target_id === id)))
-      .catch(() => {})
-  }, [id])
-
-  const handleSubscribe = async () => {
-    if (!id) return
-    setSubLoading(true)
-    try {
-      if (subscribed) {
-        await unsubscribe('document', id)
-        setSubscribed(false)
-        showToast('已取消订阅')
-      } else {
-        await subscribe('document', id)
-        setSubscribed(true)
-        showToast('已订阅')
-      }
-    } catch { showToast('操作失败') }
-    finally { setSubLoading(false) }
-  }
-
-  const showToast = (msg: string) => {
-    setToast(msg)
-    clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToast(''), 2000)
-  }
 
   const handleShareOpen = () => {
     setShareUrl('')
@@ -221,17 +183,6 @@ export default function Viewer() {
             </svg>
             <span>分享</span>
           </button>
-          <button
-            className={`viewer-share subscribe-btn ${subscribed ? 'subscribe-btn--active' : ''}`}
-            onClick={handleSubscribe}
-            disabled={subLoading}
-            aria-label={subscribed ? '取消订阅' : '订阅'}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill={subscribed ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-            </svg>
-          </button>
         </div>
       </div>
       <div className="viewer-body">
@@ -264,9 +215,6 @@ export default function Viewer() {
         open={showComments}
         onClose={() => setShowComments(false)}
       />
-
-      {/* Toast */}
-      {toast && <div className="toast">{toast}</div>}
 
       {/* 分享链接模态框 */}
       {shareOpen && (
