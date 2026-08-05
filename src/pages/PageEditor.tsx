@@ -475,9 +475,13 @@ export default function PageEditor() {
   const titleRef = useRef(title)
   titleRef.current = title
   const doSaveRef = useRef<(() => Promise<void>) | null>(null)
-  // 实时协作（Yjs CRDT，仅在线文档）：公开文档或作者本人启用
-  const [collabYdoc, setCollabYdoc] = useState<Y.Doc | null>(null)
-  const collabRef = useRef<{ provider: WebsocketProvider; ydoc: Y.Doc } | null>(null)
+  // 实时协作（Yjs CRDT，仅在线文档）：Y.Doc 始终创建（编辑器固定挂载 Collaboration 扩展），
+  // 仅具备协作资格（登录且公开/作者）时创建 WebSocket provider 参与房间同步
+  const ydocRef = useRef<Y.Doc | null>(null)
+  if (!ydocRef.current) ydocRef.current = new Y.Doc()
+  const providerRef = useRef<WebsocketProvider | null>(null)
+  // 协作资格状态：init=判断中 / skipped=不启用协作 / ready=已创建 provider
+  const [collabStatus, setCollabStatus] = useState<'init' | 'skipped' | 'ready'>('init')
   const pageContentRef = useRef('')
 
   // 更新目录（编辑时 + 加载内容后都要调用，只读文档也能用目录）
@@ -515,7 +519,7 @@ export default function PageEditor() {
       ttsHighlightExtension,
       diffHighlightExtension,
       annotationHighlightExtension,
-      ...(collabYdoc ? [Collaboration.configure({ document: collabYdoc })] : []),
+      Collaboration.configure({ document: ydocRef.current }),
     ],
     onUpdate: ({ editor: ed }) => {
       scheduleSave()
@@ -538,7 +542,7 @@ export default function PageEditor() {
         class: 'page-editor-content prose',
       },
     },
-  }, [collabYdoc])
+  })
 
   // 判断是否有编辑权限（实时协作：公开文档登录用户可编辑，私有仅作者本人；管理员也不能修改用户私有文档）
   const canEdit = useMemo(() => {
@@ -624,17 +628,24 @@ export default function PageEditor() {
         setCreatedAt(page.createdAt ?? page.created_at)
         setUpdatedAt(page.updatedAt ?? page.updated_at)
         pageContentRef.current = page.content || ''
-        // 启用实时协作：公开文档或作者本人（登录用户）
-        if (user && !collabRef.current) {
+        // 启用实时协作：公开文档或作者本人（登录用户）；Y.Doc 始终存在，仅连接房间
+        const canCollab = !!user && (page.visibility === 'public' || page.authorId === user.id || page.author_id === user.id)
+        if (canCollab && !providerRef.current) {
           try {
-            const ydoc = new Y.Doc()
             const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/api/collab/`
-            const provider = new WebsocketProvider(wsUrl, id, ydoc)
-            collabRef.current = { provider, ydoc }
-            setCollabYdoc(ydoc)
+            const provider = new WebsocketProvider(wsUrl, id, ydocRef.current!)
+            providerRef.current = provider
+            // 房间内容同步完成后，若 Yjs 文档为空才写入初始 HTML（避免覆盖他人实时内容）
+            provider.on('sync', (synced: boolean) => {
+              if (synced) trySeedContent()
+            })
+            setCollabStatus('ready')
           } catch {
             // 协作连接失败不阻断正常编辑
+            setCollabStatus('skipped')
           }
+        } else {
+          setCollabStatus('skipped')
         }
         loadTodayStats()
         setWriteStats({ ...writeStatsRef.current })
@@ -646,34 +657,44 @@ export default function PageEditor() {
       })
   }, [id, user])
 
-  // 初始内容同步：协作模式下仅当 Yjs 文档为空时写入初始 HTML，避免覆盖他人实时内容
-  useEffect(() => {
-    if (!editor) return
-    if (collabYdoc) {
-      const frag = collabYdoc.getXmlFragment('default')
-      if (frag.length === 0 && pageContentRef.current) {
-        editor.commands.setContent(pageContentRef.current)
-        pageContentRef.current = ''
-      }
-    } else if (pageContentRef.current) {
+  // 初始内容同步：仅当 Yjs 文档为空时写入初始 HTML；
+  // 协作模式（ready）等 provider sync 后再判断，非协作（skipped）直接写入
+  const trySeedContent = useCallback(() => {
+    if (!editor || !pageContentRef.current) return
+    const frag = ydocRef.current!.getXmlFragment('default')
+    if (frag.length === 0) {
       editor.commands.setContent(pageContentRef.current)
       pageContentRef.current = ''
     }
-    if (editor && (pageContentRef.current === '' || !collabYdoc)) {
-      const count = editor.state.doc.textContent.replace(/\s/g, '').length
-      setCharCount(count)
-      lastCharRef.current = count
-      updateToc(editor)
-    }
-  }, [editor, collabYdoc])
+  }, [editor])
 
-  // 卸载时销毁协作连接
+  useEffect(() => {
+    if (!editor || !pageContentRef.current) return
+    if (collabStatus === 'skipped') {
+      trySeedContent()
+    }
+    // collabStatus === 'ready'：由 provider sync 回调触发 trySeedContent
+  }, [editor, collabStatus, trySeedContent])
+
+  // 编辑器就绪后统计字数与目录
+  useEffect(() => {
+    if (!editor) return
+    const count = editor.state.doc.textContent.replace(/\s/g, '').length
+    setCharCount(count)
+    lastCharRef.current = count
+    updateToc(editor)
+  }, [editor])
+
+  // 卸载时销毁协作连接与 Y.Doc
   useEffect(() => {
     return () => {
-      if (collabRef.current) {
-        try { collabRef.current.provider.destroy() } catch { /* ignore */ }
-        try { collabRef.current.ydoc.destroy() } catch { /* ignore */ }
-        collabRef.current = null
+      if (providerRef.current) {
+        try { providerRef.current.destroy() } catch { /* ignore */ }
+        providerRef.current = null
+      }
+      if (ydocRef.current) {
+        try { ydocRef.current.destroy() } catch { /* ignore */ }
+        ydocRef.current = null
       }
     }
   }, [id])
