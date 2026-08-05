@@ -64,9 +64,10 @@ function splitTextSegments(text: string): { text: string; start: number }[] {
   return segments.filter((s) => s.text.length > 0)
 }
 
-// ===== 版本对比工具（HTML → 纯文本 → 行级 LCS diff） =====
+// ===== 版本对比工具（HTML → 纯文本 → 行级 LCS diff + 字符级差异） =====
 type DiffLineType = 'same' | 'add' | 'del' | 'mod'
-interface DiffLine { type: DiffLineType; text: string; replace?: string }
+interface DiffSegment { type: 'same' | 'add' | 'del'; text: string }
+interface DiffLine { type: DiffLineType; text: string; segments?: DiffSegment[] }
 
 // HTML 转纯文本（去除标签，保留换行）
 function htmlToText(html: string): string {
@@ -75,7 +76,29 @@ function htmlToText(html: string): string {
   return (tmp.textContent || '').replace(/\u00a0/g, ' ')
 }
 
-// 行级 LCS diff：返回带类型标注的行；相邻且数量相等的 del+add 块合并为 mod（修改）
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+// 字符级 diff：公共前后缀 + 中间差异段（用于修改行精确统计与渲染）
+function charDiffSegments(oldText: string, newText: string): DiffSegment[] {
+  const a = oldText
+  const b = newText
+  let pre = 0
+  while (pre < a.length && pre < b.length && a[pre] === b[pre]) pre++
+  let suf = 0
+  while (suf < a.length - pre && suf < b.length - pre && a[a.length - 1 - suf] === b[b.length - 1 - suf]) suf++
+  const segs: DiffSegment[] = []
+  if (pre > 0) segs.push({ type: 'same', text: a.slice(0, pre) })
+  const aMid = a.slice(pre, a.length - suf)
+  const bMid = b.slice(pre, b.length - suf)
+  if (aMid) segs.push({ type: 'del', text: aMid })
+  if (bMid) segs.push({ type: 'add', text: bMid })
+  if (suf > 0) segs.push({ type: 'same', text: a.slice(a.length - suf) })
+  return segs
+}
+
+// 行级 LCS diff：相邻 del+add 块按 min 对数配对为 mod（修改），mod 行附字符级差异
 function diffTextLines(oldText: string, newText: string): DiffLine[] {
   const a = oldText.split('\n').filter((l) => l.trim() !== '')
   const b = newText.split('\n').filter((l) => l.trim() !== '')
@@ -106,7 +129,7 @@ function diffTextLines(oldText: string, newText: string): DiffLine[] {
   while (i < n) { out.push({ type: 'del', text: a[i] }); i++ }
   while (j < m) { out.push({ type: 'add', text: b[j] }); j++ }
 
-  // 相邻 del+add 块数量相等 → 合并为 mod（修改）
+  // 相邻 del+add 块配对为 mod（取 min 对数），mod 行计算字符级差异
   const merged: DiffLine[] = []
   for (let k = 0; k < out.length; k++) {
     const cur = out[k]
@@ -116,17 +139,78 @@ function diffTextLines(oldText: string, newText: string): DiffLine[] {
       let t = k
       while (t < out.length && out[t].type === 'del') { blockDel.push(out[t].text); t++ }
       while (t < out.length && out[t].type === 'add') { blockAdd.push(out[t].text); t++ }
-      if (blockDel.length > 0 && blockAdd.length > 0 && blockDel.length === blockAdd.length) {
-        for (let x = 0; x < blockDel.length; x++) {
-          merged.push({ type: 'mod', text: blockDel[x], replace: blockAdd[x] })
-        }
-        k = t - 1
-        continue
+      const pairs = Math.min(blockDel.length, blockAdd.length)
+      for (let x = 0; x < pairs; x++) {
+        merged.push({
+          type: 'mod',
+          text: blockAdd[x],
+          segments: charDiffSegments(blockDel[x], blockAdd[x]),
+        })
       }
+      for (let x = pairs; x < blockDel.length; x++) merged.push({ type: 'del', text: blockDel[x] })
+      for (let x = pairs; x < blockAdd.length; x++) merged.push({ type: 'add', text: blockAdd[x] })
+      k = t - 1
+      continue
     }
     merged.push(cur)
   }
   return merged
+}
+
+// 将 diff 结果应用到版本 HTML：在正文块内直接高亮（新增绿 / 删除红 / 修改黄）
+function applyDiffToHtml(baseHtml: string, lines: DiffLine[]): string {
+  const container = document.createElement('div')
+  container.innerHTML = baseHtml || ''
+  const curLines = lines.filter((l) => l.type !== 'del')
+  let idx = 0
+  let pendingDels: string[] = []
+
+  const flushDels = (refEl: HTMLElement) => {
+    if (!pendingDels.length) return
+    for (const d of pendingDels) {
+      const el = document.createElement('div')
+      el.className = 'vdl-inline-del-row'
+      el.textContent = d
+      refEl.before(el)
+    }
+    pendingDels = []
+  }
+
+  const markLeaf = (el: HTMLElement) => {
+    const text = (el.textContent || '').replace(/\u00a0/g, ' ').trim()
+    if (!text) return
+    const line = curLines[idx]
+    if (!line || line.text.trim() !== text) return
+    if (line.type === 'add') {
+      flushDels(el)
+      el.innerHTML = `<span class="vdl-inline-add">${escapeHtml(el.textContent || '')}</span>`
+    } else if (line.type === 'mod' && line.segments) {
+      flushDels(el)
+      const inner = line.segments
+        .map((s) => {
+          if (s.type === 'same') return escapeHtml(s.text)
+          if (s.type === 'del') return `<span class="vdl-inline-del">${escapeHtml(s.text)}</span>`
+          return `<span class="vdl-inline-add">${escapeHtml(s.text)}</span>`
+        })
+        .join('')
+      el.innerHTML = `<span class="vdl-inline-mod">${inner}</span>`
+    }
+    idx++
+  }
+
+  const walk = (node: HTMLElement) => {
+    for (const child of Array.from(node.children)) {
+      const h = child as HTMLElement
+      if (h.children.length > 0) {
+        markLeaf(h)
+        walk(h)
+      } else {
+        markLeaf(h)
+      }
+    }
+  }
+  walk(container)
+  return container.innerHTML
 }
 
 // 判断文本是否含足够中文（与主进程 hasChinese 一致）
@@ -241,10 +325,12 @@ export default function PageEditor() {
   const [versions, setVersions] = useState<PageVersion[]>([])
   const [versionsLoading, setVersionsLoading] = useState(false)
   const [restoreConfirmId, setRestoreConfirmId] = useState<number | null>(null)
-  // 版本对比（查看对比时展示 diff 高亮 + 底部栏统计）
+  // 版本对比（查看对比时直接在正文高亮 + 顶部信息条统计）
   const [comparingVersion, setComparingVersion] = useState<PageVersion | null>(null)
-  const [diffLines, setDiffLines] = useState<DiffLine[]>([])
   const [diffStats, setDiffStats] = useState({ add: 0, del: 0 })
+  // 对比模式：正文被临时替换为「版本内容 + 差异高亮」，退出时恢复原 HTML
+  const diffBaseHtmlRef = useRef<string | null>(null)
+  const comparingRef = useRef(false)
   const [ttsStatus, setTtsStatus] = useState<'idle' | 'synthesizing' | 'playing'>('idle')
   const [ttsProgress, setTtsProgress] = useState(0)
   const [ttsTotal, setTtsTotal] = useState(0)
@@ -347,6 +433,7 @@ export default function PageEditor() {
 
   const doSave = useCallback(async () => {
     if (!id || !canEdit || !editor) return
+    if (comparingRef.current) return // 对比模式不保存
     setSaving(true)
     try {
       await updatePage(id, {
@@ -464,27 +551,47 @@ export default function PageEditor() {
     }
   }
 
-  // 版本对比：版本内容（旧）与当前编辑器内容（新）做行级 diff
+  // 版本对比：该版本相对「上一版本」的修改（列表最后一项为最旧版本，无上一版则对比当前文档）
+  // 对比结果直接在编辑器正文中高亮（新增绿 / 删除红 / 修改黄），退出时恢复原文
   const handleCompare = (v: PageVersion) => {
     if (!editor) return
-    const current = htmlToText(editor.getHTML())
-    const target = htmlToText(v.content || '')
-    const lines = diffTextLines(target, current)
-    setDiffLines(lines)
+    const idx = versions.findIndex((x) => x.id === v.id)
+    const prev = idx >= 0 && idx < versions.length - 1 ? versions[idx + 1] : null
+    const prevText = htmlToText(prev?.content || '')
+    const curText = htmlToText(v.content || '')
+    const lines = diffTextLines(prevText, curText)
     let add = 0
     let del = 0
     for (const l of lines) {
       if (l.type === 'add') add += l.text.length
       else if (l.type === 'del') del += l.text.length
-      else if (l.type === 'mod') {
-        add += (l.replace || '').length
-        del += l.text.length
+      else if (l.type === 'mod' && l.segments) {
+        for (const s of l.segments) {
+          if (s.type === 'add') add += s.text.length
+          else if (s.type === 'del') del += s.text.length
+        }
       }
     }
     setDiffStats({ add, del })
+    // 临时替换正文为「版本内容 + 差异高亮」，退出对比时恢复
+    if (diffBaseHtmlRef.current === null) diffBaseHtmlRef.current = editor.getHTML()
+    comparingRef.current = true
+    editor.commands.setContent(applyDiffToHtml(v.content || '', lines))
+    editor.setEditable(false)
     setComparingVersion(v)
-    // 对比直接在主内容区显示，关闭右侧版本历史抽屉
     setShowVersions(false)
+  }
+
+  // 退出对比：恢复原正文与编辑状态
+  const exitCompare = () => {
+    if (!editor) return
+    comparingRef.current = false
+    if (diffBaseHtmlRef.current !== null) {
+      editor.commands.setContent(diffBaseHtmlRef.current)
+      diffBaseHtmlRef.current = null
+    }
+    editor.setEditable(canEdit)
+    setComparingVersion(null)
   }
 
   // TTS 进度悬浮球拖动 + 点击展开/收起
@@ -750,6 +857,7 @@ export default function PageEditor() {
             </svg>
             {charCount} 字
           </span>
+          {saving && <span className="page-editor-saving">保存中...</span>}
         </div>
         {canEdit && (
           <PageEditorMenu editor={editor} />
@@ -779,54 +887,26 @@ export default function PageEditor() {
           </aside>
         )}
         <div className="page-editor-main">
-          {comparingVersion ? (
-            <div className="version-diff-main">
-              <div className="version-diff-head">
-                <span className="version-diff-title">版本 {comparingVersion.version} 对比当前</span>
-                <button className="version-diff-back" onClick={() => setComparingVersion(null)}>
-                  返回编辑器
-                </button>
-              </div>
-              <div className="version-diff-body">
-                {diffLines.length === 0 ? (
-                  <div className="comment-empty">两个版本内容完全一致</div>
-                ) : (
-                  diffLines.map((l, idx) => (
-                    <div key={idx} className={`version-diff-line version-diff-${l.type}`}>
-                      <span className="version-diff-marker">
-                        {l.type === 'add' ? '+' : l.type === 'del' ? '−' : l.type === 'mod' ? '±' : ''}
-                      </span>
-                      <span className="version-diff-text">
-                        {l.type === 'mod' ? (
-                          <>
-                            <span className="vdl-old">{l.text}</span>
-                            <span className="vdl-arrow"> → </span>
-                            <span className="vdl-new">{l.replace}</span>
-                          </>
-                        ) : (
-                          l.text
-                        )}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
+          {comparingVersion && (
+            <div className="version-info-bar">
+              <span className="version-info-bar-title">版本 {comparingVersion.version}</span>
+              <span className="diff-stat diff-stat--add">+{diffStats.add} 字</span>
+              <span className="diff-stat diff-stat--del">-{diffStats.del} 字</span>
+              <span className="version-info-bar-time">{formatDate(comparingVersion.createdAt)}</span>
+              <button className="version-info-bar-exit" onClick={exitCompare}>退出对比</button>
             </div>
-          ) : (
-            <>
-              <input
-                className="page-editor-title-input"
-                type="text"
-                value={title}
-                onChange={(e) => handleTitleChange(e.target.value)}
-                placeholder="无标题文档"
-                readOnly={!canEdit}
-              />
-              <div className={`page-editor-wrapper ${!canEdit ? 'page-editor-wrapper--readonly' : ''}`}>
-                <EditorContent editor={editor} />
-              </div>
-            </>
           )}
+          <input
+            className="page-editor-title-input"
+            type="text"
+            value={title}
+            onChange={(e) => handleTitleChange(e.target.value)}
+            placeholder="无标题文档"
+            readOnly={!canEdit || !!comparingVersion}
+          />
+          <div className={`page-editor-wrapper ${!canEdit || comparingVersion ? 'page-editor-wrapper--readonly' : ''}`}>
+            <EditorContent editor={editor} />
+          </div>
         </div>
       </div>
 
@@ -1093,15 +1173,6 @@ export default function PageEditor() {
             </button>
           )}
         </div>
-        <div className="pe-bottom-group pe-bottom-center">
-          {comparingVersion && (
-            <span className="pe-bottom-diff-info">
-              当前查看的版本 · <strong>版本 {comparingVersion.version}</strong>
-              <span className="diff-stat diff-stat--add">+{diffStats.add} 字</span>
-              <span className="diff-stat diff-stat--del">-{diffStats.del} 字</span>
-            </span>
-          )}
-        </div>
         <div className="pe-bottom-group pe-bottom-right">
           {id && (
             <button
@@ -1114,7 +1185,6 @@ export default function PageEditor() {
               </svg>
             </button>
           )}
-          {saving && <span className="page-editor-saving">保存中...</span>}
         </div>
       </div>
     </div>

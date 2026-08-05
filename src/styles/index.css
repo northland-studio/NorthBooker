@@ -3109,6 +3109,71 @@ body.dark .tts-reading-highlight {
   padding: 12px 8px;
 }
 
+/* ===== 版本对比正文内高亮（直接在编辑器文本中标记，类 TTS 阅读高亮） ===== */
+.vdl-inline-add {
+  background: rgba(22, 163, 74, 0.18);
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(22, 163, 74, 0.25);
+}
+.vdl-inline-del {
+  background: rgba(220, 38, 38, 0.15);
+  color: #dc2626;
+  text-decoration: line-through;
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.2);
+}
+.vdl-inline-mod {
+  background: rgba(234, 179, 8, 0.22);
+  border-radius: 3px;
+  box-shadow: 0 0 0 1px rgba(234, 179, 8, 0.3);
+}
+.vdl-inline-del-row {
+  color: #dc2626;
+  text-decoration: line-through;
+  background: rgba(220, 38, 38, 0.12);
+  border-radius: 4px;
+  padding: 2px 8px;
+  margin: 2px 0;
+}
+
+/* 版本信息条（对比时显示在正文上方居中） */
+.version-info-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 14px;
+  margin-bottom: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-card);
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.version-info-bar-title {
+  font-weight: 600;
+  color: var(--color-text);
+}
+.version-info-bar-time {
+  font-variant-numeric: tabular-nums;
+}
+.version-info-bar-exit {
+  padding: 3px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.version-info-bar-exit:hover {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
 /* ProseMirror / Tiptap 编辑器样式 */
 .ProseMirror {
   outline: none;
