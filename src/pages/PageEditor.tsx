@@ -238,6 +238,69 @@ const ttsHighlightExtension = Extension.create({
   },
 })
 
+// ===== 版本对比高亮 Decoration 插件（模块级状态，类 TTS 朗读高亮） =====
+let diffHighlightRanges: { from: number; to: number; type: 'add' | 'mod' }[] = []
+
+const diffHighlightPlugin = new Plugin({
+  key: new PluginKey('diffHighlight'),
+  state: {
+    init: () => DecorationSet.empty,
+    apply(tr, set) {
+      if (tr.getMeta('diffHighlight') !== undefined) {
+        if (!diffHighlightRanges.length) return DecorationSet.empty
+        const decos: Decoration[] = []
+        for (const r of diffHighlightRanges) {
+          tr.doc.nodesBetween(r.from, r.to, (node: any, pos: number) => {
+            if (!node.isText) return true
+            const nFrom = Math.max(r.from, pos)
+            const nTo = Math.min(r.to, pos + node.nodeSize)
+            if (nTo > nFrom) {
+              decos.push(Decoration.inline(nFrom, nTo, { class: r.type === 'add' ? 'diff-read-add' : 'diff-read-mod' }))
+            }
+            return true
+          })
+        }
+        return DecorationSet.create(tr.doc, decos)
+      }
+      return set.map(tr.mapping, tr.doc)
+    },
+  },
+  props: {
+    decorations(state) {
+      return this.getState(state)
+    },
+  },
+})
+
+const diffHighlightExtension = Extension.create({
+  name: 'diffHighlight',
+  addProseMirrorPlugins() {
+    return [diffHighlightPlugin]
+  },
+})
+
+// 将 cur 侧 diff 行（add/mod）映射到文档块级 pos 范围（用于正文内高亮）
+function mapDiffToPositions(doc: any, curLines: DiffLine[]): { from: number; to: number; type: 'add' | 'mod' }[] {
+  const ranges: { from: number; to: number; type: 'add' | 'mod' }[] = []
+  let i = 0
+  doc.descendants((node: any, pos: number) => {
+    if (node.isBlock && node.textContent) {
+      const text = node.textContent.replace(/\u00a0/g, ' ')
+      const line = curLines[i]
+      if (line && line.text.trim() === text.trim()) {
+        if (line.type === 'add' || line.type === 'mod') {
+          const from = pos + 1
+          const to = pos + node.nodeSize - 1
+          if (to > from) ranges.push({ from, to, type: line.type })
+        }
+        i++
+      }
+    }
+    return true
+  })
+  return ranges
+}
+
 // 在线文档编辑器
 export default function PageEditor() {
   const { id } = useParams<{ id: string }>()
@@ -265,10 +328,12 @@ export default function PageEditor() {
   const [versions, setVersions] = useState<PageVersion[]>([])
   const [versionsLoading, setVersionsLoading] = useState(false)
   const [restoreConfirmId, setRestoreConfirmId] = useState<number | null>(null)
-  // 版本对比（GitHub / VS Code 风格 diff 视图：删除红色、新增绿色、修改黄色）
+  // 版本对比（查看对比时直接在正文高亮 + 顶部信息条统计）
   const [comparingVersion, setComparingVersion] = useState<PageVersion | null>(null)
-  const [diffLines, setDiffLines] = useState<DiffLine[]>([])
   const [diffStats, setDiffStats] = useState({ add: 0, del: 0 })
+  // 对比模式：正文被临时替换为「版本内容 + 差异高亮」，退出时恢复原 HTML
+  const diffBaseHtmlRef = useRef<string | null>(null)
+  const comparingRef = useRef(false)
   const [ttsStatus, setTtsStatus] = useState<'idle' | 'synthesizing' | 'playing'>('idle')
   const [ttsProgress, setTtsProgress] = useState(0)
   const [ttsTotal, setTtsTotal] = useState(0)
@@ -330,6 +395,7 @@ export default function PageEditor() {
       TableCell,
       TableHeader,
       ttsHighlightExtension,
+      diffHighlightExtension,
     ],
     onUpdate: ({ editor: ed }) => {
       scheduleSave()
@@ -371,6 +437,7 @@ export default function PageEditor() {
 
   const doSave = useCallback(async () => {
     if (!id || !canEdit || !editor) return
+    if (comparingRef.current) return // 对比模式不保存
     setSaving(true)
     try {
       await updatePage(id, {
@@ -488,9 +555,10 @@ export default function PageEditor() {
     }
   }
 
-  // 版本对比：该版本相对「上一版本」的修改，渲染为 GitHub/VS Code 风格 diff 视图
-  // （删除=红色删除线、新增=绿色、修改=黄色；最旧版本无上一版则对比空内容）
+  // 版本对比：该版本相对「上一版本」的修改（列表最后一项为最旧版本，无上一版则对比当前文档）
+  // 对比结果直接在编辑器正文中高亮（新增绿 / 删除红 / 修改黄），退出时恢复原文
   const handleCompare = (v: PageVersion) => {
+    if (!editor) return
     const idx = versions.findIndex((x) => x.id === v.id)
     const prev = idx >= 0 && idx < versions.length - 1 ? versions[idx + 1] : null
     const prevText = htmlToText(prev?.content || '')
@@ -508,14 +576,30 @@ export default function PageEditor() {
         }
       }
     }
-    setDiffLines(lines)
     setDiffStats({ add, del })
+    // 临时替换正文为该版本内容，并在正文内以 Decoration 高亮差异（类 TTS 朗读高亮）
+    if (diffBaseHtmlRef.current === null) diffBaseHtmlRef.current = editor.getHTML()
+    comparingRef.current = true
+    editor.commands.setContent(v.content || '')
+    const curLines = lines.filter((l) => l.type !== 'del')
+    diffHighlightRanges = mapDiffToPositions(editor.state.doc, curLines)
+    editor.view.dispatch(editor.state.tr.setMeta('diffHighlight', true))
+    editor.setEditable(false)
     setComparingVersion(v)
     setShowVersions(false)
   }
 
-  // 退出对比：返回编辑器
+  // 退出对比：清除高亮并恢复原正文与编辑状态
   const exitCompare = () => {
+    if (!editor) return
+    comparingRef.current = false
+    diffHighlightRanges = []
+    editor.view.dispatch(editor.state.tr.setMeta('diffHighlight', true))
+    if (diffBaseHtmlRef.current !== null) {
+      editor.commands.setContent(diffBaseHtmlRef.current)
+      diffBaseHtmlRef.current = null
+    }
+    editor.setEditable(canEdit)
     setComparingVersion(null)
   }
 
@@ -827,48 +911,17 @@ export default function PageEditor() {
           </aside>
         )}
         <div className="page-editor-main">
-          {comparingVersion ? (
-            <div className="version-diff-view">
-              {diffLines.length === 0 ? (
-                <div className="comment-empty">该版本与上一版本内容一致</div>
-              ) : (
-                diffLines.map((l, idx) => (
-                  <div key={idx} className={`vd-row vd-${l.type}`}>
-                    <span className="vd-marker">
-                      {l.type === 'add' ? '+' : l.type === 'del' ? '−' : l.type === 'mod' ? '±' : ''}
-                    </span>
-                    <span className="vd-text">
-                      {l.type === 'mod' && l.segments
-                        ? l.segments.map((s, j) =>
-                            s.type === 'same' ? (
-                              <span key={j}>{s.text}</span>
-                            ) : s.type === 'del' ? (
-                              <span key={j} className="vd-inline-del">{s.text}</span>
-                            ) : (
-                              <span key={j} className="vd-inline-add">{s.text}</span>
-                            ),
-                          )
-                        : l.text}
-                    </span>
-                  </div>
-                ))
-              )}
-            </div>
-          ) : (
-            <>
-              <input
-                className="page-editor-title-input"
-                type="text"
-                value={title}
-                onChange={(e) => handleTitleChange(e.target.value)}
-                placeholder="无标题文档"
-                readOnly={!canEdit}
-              />
-              <div className={`page-editor-wrapper ${!canEdit ? 'page-editor-wrapper--readonly' : ''}`}>
-                <EditorContent editor={editor} />
-              </div>
-            </>
-          )}
+          <input
+            className="page-editor-title-input"
+            type="text"
+            value={title}
+            onChange={(e) => handleTitleChange(e.target.value)}
+            placeholder="无标题文档"
+            readOnly={!canEdit || !!comparingVersion}
+          />
+          <div className={`page-editor-wrapper ${!canEdit || comparingVersion ? 'page-editor-wrapper--readonly' : ''}`}>
+            <EditorContent editor={editor} />
+          </div>
         </div>
       </div>
 
