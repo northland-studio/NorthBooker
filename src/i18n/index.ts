@@ -275,6 +275,20 @@ const zh: Record<string, string> = {
   'cowork.openDoc': '打开文档',
   'cowork.saved': '已保存',
   'cowork.saveFailed': '保存失败，请重试',
+  // 个人主页
+  'profile.notFound': '用户不存在',
+  'profile.me': '我',
+  'profile.level': '等级',
+  'profile.joined': '加入',
+  'profile.emailBound': '邮箱已绑定',
+  'profile.emailUnbound': '邮箱未绑定',
+  'profile.bindNow': '去绑定',
+  'profile.totalChars': '贡献总字数',
+  'profile.docCount': '创作文档',
+  'profile.uploadCount': '上传文件',
+  'profile.subCount': '订阅文档',
+  'profile.subscriptions': '订阅情况',
+  'profile.noSubs': '还没有订阅任何文档',
 }
 
 const en: Record<string, string> = {
@@ -546,6 +560,20 @@ const en: Record<string, string> = {
   'cowork.openDoc': 'Open document',
   'cowork.saved': 'Saved',
   'cowork.saveFailed': 'Failed to save, please retry',
+  // Profile
+  'profile.notFound': 'User not found',
+  'profile.me': 'Me',
+  'profile.level': 'Level',
+  'profile.joined': 'Joined',
+  'profile.emailBound': 'Email bound',
+  'profile.emailUnbound': 'Email not bound',
+  'profile.bindNow': 'Bind now',
+  'profile.totalChars': 'Total contributed chars',
+  'profile.docCount': 'Documents created',
+  'profile.uploadCount': 'Files uploaded',
+  'profile.subCount': 'Subscriptions',
+  'profile.subscriptions': 'Subscriptions',
+  'profile.noSubs': 'No subscriptions yet',
 }
 
 const dict: Record<Lang, Record<string, string>> = { zh, en }

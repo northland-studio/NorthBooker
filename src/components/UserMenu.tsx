@@ -60,6 +60,10 @@ export default function UserMenu() {
               {user.title && <span className="user-title"> · {user.title}</span>}
             </div>
           </div>
+          {/* 个人主页（位于管理后台上方） */}
+          <Link to={`/profile/${user.id}`} className="user-dropdown-item" onClick={() => setOpen(false)}>
+            个人主页
+          </Link>
           {isAdmin(user) && (
             <Link to="/admin" className="user-dropdown-item" onClick={() => setOpen(false)}>
               管理后台
