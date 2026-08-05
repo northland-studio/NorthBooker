@@ -8,6 +8,7 @@ import Admin from '@/pages/Admin'
 import AuthCallback from '@/pages/AuthCallback'
 import Pages from '@/pages/Pages'
 import PageEditor from '@/pages/PageEditor'
+import CoWorkPanel from '@/pages/CoWorkPanel'
 import PageTerms from '@/pages/PageTerms'
 import PageDownload from '@/pages/PageDownload'
 import { useAuthStore } from '@/store/auth'
@@ -46,6 +47,15 @@ export default function App() {
           <Route path="/viewer/:id" element={<Viewer />} />
           <Route path="/pages" element={<Pages />} />
           <Route path="/pages/:id" element={<PageEditor />} />
+          {/* 协作控制面板：要求登录（文档作者可管理权限，访客只读） */}
+          <Route
+            path="/pages/:id/cowork_set"
+            element={
+              <RequireLevel minLevel={0}>
+                <CoWorkPanel />
+              </RequireLevel>
+            }
+          />
           <Route path="/terms" element={<PageTerms />} />
           <Route path="/download" element={<PageDownload />} />
           {/* 管理后台：要求登录且 level >= 1 */}

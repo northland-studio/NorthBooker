@@ -13,6 +13,7 @@ const zh: Record<string, string> = {
   'common.save': '保存',
   'common.delete': '删除',
   'common.unknownUser': '未知用户',
+  'common.savingText': '保存中...',
   // 导航
   'nav.onlineDocs': '在线文档',
   'nav.download': '应用下载',
@@ -126,6 +127,7 @@ const zh: Record<string, string> = {
   'editor.coworkTitle': '协作编辑权限：任何人可编辑 / 仅作者可编辑',
   'editor.coworkOpen': '协作开放',
   'editor.coworkAuthor': '仅作者',
+  'editor.coworkPanel': '协作控制面板',
   // 评论
   'comment.title': '评论 ({n})',
   'comment.placeholder': '写下你的评论...',
@@ -253,6 +255,26 @@ const zh: Record<string, string> = {
   'email.sentHint': '验证邮件已发送，请前往邮箱查收并点击邮件中的「完成绑定」按钮。链接 60 分钟内有效。',
   'email.later': '稍后再说',
   'email.currentUser': '当前账号',
+  // 协作控制面板
+  'cowork.pageTitle': '协作控制面板',
+  'cowork.docInfo': '文档信息',
+  'cowork.author': '作者',
+  'cowork.visibility': '可见性',
+  'cowork.updatedAt': '更新时间',
+  'cowork.toggleVisibility': '切换',
+  'cowork.editPolicy': '协作编辑权限',
+  'cowork.editPolicyDesc': '控制哪些用户可以参与该文档的实时协作编辑。',
+  'cowork.policyOpen': '任何人可编辑',
+  'cowork.policyOpenDesc': '所有登录用户都可以实时协作编辑该文档',
+  'cowork.policyAuthor': '仅作者可编辑',
+  'cowork.policyAuthorDesc': '只有文档作者可以编辑，访客只读',
+  'cowork.readonlyHint': '只有文档作者可以修改协作权限',
+  'cowork.subscription': '更新订阅',
+  'cowork.subscriptionDesc': '订阅该文档，更新后通过邮件通知',
+  'cowork.noEmailHint': '（尚未绑定邮箱，绑定后即可接收通知）',
+  'cowork.openDoc': '打开文档',
+  'cowork.saved': '已保存',
+  'cowork.saveFailed': '保存失败，请重试',
 }
 
 const en: Record<string, string> = {
@@ -504,6 +526,26 @@ const en: Record<string, string> = {
   'email.sentHint': 'Verification email sent. Check your inbox and click the "Confirm" button. The link is valid for 60 minutes.',
   'email.later': 'Later',
   'email.currentUser': 'Account',
+  // Collaboration panel
+  'cowork.pageTitle': 'Collaboration Panel',
+  'cowork.docInfo': 'Document Info',
+  'cowork.author': 'Author',
+  'cowork.visibility': 'Visibility',
+  'cowork.updatedAt': 'Updated',
+  'cowork.toggleVisibility': 'Toggle',
+  'cowork.editPolicy': 'Collaboration Permission',
+  'cowork.editPolicyDesc': 'Control who can edit this document in real time.',
+  'cowork.policyOpen': 'Anyone can edit',
+  'cowork.policyOpenDesc': 'All signed-in users can collaborate in real time',
+  'cowork.policyAuthor': 'Author only',
+  'cowork.policyAuthorDesc': 'Only the author can edit, others read-only',
+  'cowork.readonlyHint': 'Only the author can change collaboration permission',
+  'cowork.subscription': 'Update Subscription',
+  'cowork.subscriptionDesc': 'Get email notifications when this document is updated',
+  'cowork.noEmailHint': '(Bind your email to receive notifications)',
+  'cowork.openDoc': 'Open document',
+  'cowork.saved': 'Saved',
+  'cowork.saveFailed': 'Failed to save, please retry',
 }
 
 const dict: Record<Lang, Record<string, string>> = { zh, en }

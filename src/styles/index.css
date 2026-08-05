@@ -4907,3 +4907,126 @@ body.dark .tts-reading-highlight {
   font-family: inherit;
 }
 
+/* ===== 协作控制面板（2.6.2） ===== */
+.cowork-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 20px 64px;
+}
+.cowork-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+.cowork-title-wrap {
+  flex: 1;
+  min-width: 0;
+}
+.cowork-title {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cowork-subtitle {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.cowork-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.cowork-card {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 20px;
+}
+.cowork-card-title {
+  margin: 0 0 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.cowork-card-desc {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  line-height: 1.7;
+}
+.cowork-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 9px 0;
+  border-bottom: 1px dashed var(--color-border);
+  font-size: 14px;
+}
+.cowork-info-row:last-child {
+  border-bottom: none;
+}
+.cowork-info-label {
+  color: var(--color-text-muted);
+}
+.cowork-info-value {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-text);
+}
+.cowork-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.cowork-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+.cowork-option input {
+  margin-top: 3px;
+  accent-color: var(--color-primary);
+}
+.cowork-option--active {
+  border-color: var(--color-primary);
+  background: rgba(0, 74, 173, 0.05);
+}
+.cowork-option--disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.cowork-option-title {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+.cowork-option-desc {
+  display: block;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 2px;
+}
+.cowork-hint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin: 10px 0 0;
+}
+.cowork-tip {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--color-success);
+  text-align: center;
+}
+

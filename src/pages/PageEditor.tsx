@@ -20,7 +20,7 @@ import { TableHeader } from '@tiptap/extension-table-header'
 import Collaboration from '@tiptap/extension-collaboration'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
-import { fetchPage, updatePage, fetchPageVersions, restorePageVersion, updateCoworkSet } from '@/api/pages'
+import { fetchPage, updatePage, fetchPageVersions, restorePageVersion } from '@/api/pages'
 import { fetchSubscriptions, subscribe, unsubscribe } from '@/api/subscriptions'
 import { fetchAnnotations, addAnnotation, deleteAnnotation, type Annotation } from '@/api/annotations'
 import { useAuthStore } from '@/store/auth'
@@ -749,17 +749,6 @@ export default function PageEditor() {
       await updatePage(id!, { visibility: newVis })
     } catch {
       setVisibility(visibility)
-    }
-  }
-
-  // 切换协作编辑权限（2.6.1）：open=任何登录用户 / author=仅作者（仅作者可操作）
-  const toggleCoworkPolicy = async () => {
-    const next = coworkPolicy === 'open' ? 'author' : 'open'
-    setCoworkPolicy(next)
-    try {
-      await updateCoworkSet(id!, next)
-    } catch {
-      setCoworkPolicy(coworkPolicy)
     }
   }
 
@@ -1620,12 +1609,12 @@ export default function PageEditor() {
               {visibility === 'public' ? t('editor.public') : t('editor.private')}
             </button>
           )}
-          {/* 协作编辑权限（2.6.1）：仅作者可见，open=任何登录用户 / author=仅作者 */}
-          {isAuthor && visibility === 'public' && (
+          {/* 协作控制面板入口（2.6.2）：作者管理权限，访客只读查看 */}
+          {user && visibility === 'public' && (
             <button
               className={`pe-vis-toggle ${coworkPolicy === 'open' ? 'pe-vis-public' : ''}`}
-              onClick={toggleCoworkPolicy}
-              title={t('editor.coworkTitle')}
+              onClick={() => navigate(`/pages/${id}/cowork_set`)}
+              title={t('editor.coworkPanel')}
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 {coworkPolicy === 'open' ? (
