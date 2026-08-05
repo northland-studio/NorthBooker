@@ -69,6 +69,19 @@
 - 字数统计：在线文档编辑器实时显示字数，文档列表显示每篇文档字数（网页 / 桌面同步）
 - 密码分享：带密码和过期的分享链接
 - 更新通知：WebSocket 实时推送 + 系统原生通知
+- 版本对比删除红色高亮：对比版本时，被删去的内容以红色删除线直接加载进正文（Decoration widget，非独立 diff 视图）
+- 实时协作编辑：基于 Yjs CRDT 的在线文档多人实时同步，公开文档登录用户可协作编辑
+- 回收站：文档软删除，可恢复 / 永久删除
+- 审计日志 / 登录日志：管理后台可视化查看管理操作与登录记录
+- 文档标签：标签展示、筛选、右键编辑；最近 7 天文档快捷筛选
+- 片段批注：在线文档选中文本添加批注，正文标记 + 面板管理（仅在线文档）
+- 订阅邮件通知：在线文档更新经腾讯企业邮箱 SMTP 发送邮件（仅限在线文档）
+- 快捷键体系：Ctrl+S 保存、Ctrl+/ 快捷键帮助
+- 写作统计：本次写作 / 今日写作 / 全文字数实时统计
+- 跟随系统主题：主题三态切换（跟随系统 / 亮色 / 暗色）
+- 数据备份与迁移：SQLite 快照下载 + 全量 JSON 导出
+- 国际化 i18n：中英双语一键切换
+- Electron 多窗口与托盘：新建辅助窗口、托盘快捷入口
 - 响应式布局，适配桌面与移动端
 
 ---
@@ -85,6 +98,7 @@
 | 请求库 | Axios |
 | 文档渲染 | @doc-preview/react |
 | 富文本编辑 | Tiptap (ProseMirror) |
+| 实时协作 | Yjs + y-websocket |
 | 桌面封装 | Electron 31 |
 | 后端 | Node.js + Express |
 | 数据库 | SQLite (better-sqlite3) |
@@ -223,6 +237,13 @@ QINIU_ACCESS_KEY=                 # 七牛 AccessKey
 QINIU_SECRET_KEY=                 # 七牛 SecretKey
 QINIU_BUCKET=northbooker
 QINIU_CDN_DOMAIN=https://cdn.northbooker.xuanjian.top
+
+# 腾讯企业邮箱 SMTP（订阅邮件通知，2.6.0）
+SMTP_HOST=smtp.exmail.qq.com
+SMTP_PORT=465
+SMTP_USER=noreply@xuanjian.top
+SMTP_PASS=                        # 邮箱授权码/密码，请勿提交真实值
+MAIL_LOGO_URL=                    # 邮件模板 Logo 图片地址（可引用七牛/CDN 图片资源）
 ```
 
 > 开发环境下可将 `OAUTH_REDIRECT_URI` 设为 `http://localhost:5173/api/auth/callback`，并确保玄剑官网注册的 redirect_uri 允许该地址。
@@ -331,7 +352,11 @@ QINIU_CDN_DOMAIN=https://cdn.northbooker.xuanjian.top
 | `/api/health` | GET | 公开 | 健康检查 |
 | `/api/documents` | GET | 公开 | 文档列表 |
 | `/api/documents/:id` | GET | 公开 | 单个文档 |
-| `/api/documents/:id` | PUT | level >= 1 | 编辑标题 |
+| `/api/documents/:id` | PUT | 登录 | 编辑标题/可见性/标签/移动 |
+| `/api/documents/:id` | DELETE | 登录 | 软删除（移入回收站） |
+| `/api/documents/trash` | GET | 登录 | 回收站列表 |
+| `/api/documents/:id/restore` | POST | 登录 | 从回收站恢复 |
+| `/api/documents/:id/permanent` | DELETE | level >= 1 | 永久删除 |
 | `/api/auth/login` | GET | 公开 | 跳转授权 |
 | `/api/auth/callback` | GET | 公开 | 授权回调 |
 | `/api/auth/me` | GET | 登录 | 当前用户 |
@@ -344,6 +369,10 @@ QINIU_CDN_DOMAIN=https://cdn.northbooker.xuanjian.top
 | `/api/admin/users` | GET | level >= 1 | 用户列表 |
 | `/api/admin/documents/:id/visibility` | PUT | level >= 1 | 切换可见性 |
 | `/api/admin/documents/:id` | DELETE | level >= 1 | 删除文档（同步清理七牛） |
+| `/api/admin/audit-logs` | GET | level >= 1 | 审计日志（分页） |
+| `/api/admin/login-logs` | GET | level >= 1 | 登录日志（分页） |
+| `/api/admin/backup` | GET | level >= 1 | SQLite 数据库快照下载 |
+| `/api/admin/export-all` | GET | level >= 1 | 全量 JSON 导出（迁移用） |
 | `/api/bookmarks` | GET | 登录 | 获取书签列表 |
 | `/api/bookmarks/check/:docId` | GET | 登录 | 检查文档是否已收藏 |
 | `/api/bookmarks/:docId` | POST | 登录 | 添加书签 |
@@ -354,13 +383,16 @@ QINIU_CDN_DOMAIN=https://cdn.northbooker.xuanjian.top
 | `/api/pages/tree` | GET | 公开 | 获取页面树 |
 | `/api/pages/:id` | GET | 公开 | 获取页面 |
 | `/api/pages` | POST | 登录 | 创建页面 |
-| `/api/pages/:id` | PUT | 登录 | 更新页面（作者/管理员） |
+| `/api/pages/:id` | PUT | 登录 | 更新页面（作者或公开文档可协作编辑） |
 | `/api/pages/:id` | DELETE | 登录 | 删除页面（作者/管理员） |
+| `/api/annotations/:pageId` | GET/POST | 登录 | 在线文档片段批注 |
+| `/api/annotations/:id` | DELETE | 登录 | 删除批注（作者/管理员） |
 | `/api/folders` | GET | 公开 | 获取文件夹列表（支持 parent_id 过滤） |
 | `/api/folders` | POST | level >= 1 | 创建文件夹 |
 | `/api/folders/:id` | DELETE | level >= 1 | 删除文件夹（级联清理子文档） |
 | `/api/search` | GET | 公开 | 全文搜索（文档 + 在线文档） |
-| `/api/subscriptions` | GET/POST/DELETE | 登录 | 文档订阅管理 |
+| `/api/subscriptions` | GET/POST/DELETE | 登录 | 订阅管理（仅限在线文档 pages） |
+| `/api/collab/:room` | WebSocket | 公开 | Yjs 实时协作同步（仅在线文档） |
 | `/api/share` | POST | 登录 | 创建密码分享链接 |
 | `/api/share/:token` | GET | 公开 | 验证分享链接 |
 | `/api/share/:token/verify` | POST | 公开 | 密码验证获取文档 |
