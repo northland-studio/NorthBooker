@@ -15,7 +15,7 @@ function stripHtml(html) {
 router.get('/:userId', optionalAuthMiddleware, (req, res) => {
   const id = Number(req.params.userId)
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: '无效的用户ID' })
-  const user = db.prepare('SELECT id, username, avatar, level, title, contribution, email, created_at FROM users WHERE id = ?').get(id)
+  const user = db.prepare('SELECT id, username, avatar, level, contribution, email, created_at FROM users WHERE id = ?').get(id)
   if (!user) return res.status(404).json({ error: '用户不存在' })
 
   // 贡献总字数 = 该用户创作的所有在线文档（pages）纯文本字数合计
@@ -47,7 +47,7 @@ router.get('/:userId', optionalAuthMiddleware, (req, res) => {
       username: user.username,
       avatar: user.avatar,
       level: user.level,
-      title: user.title,
+      title: null,
       contribution: user.contribution,
       createdAt: user.created_at,
       emailBound: !!user.email,
