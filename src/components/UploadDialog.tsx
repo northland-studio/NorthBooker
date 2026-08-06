@@ -3,18 +3,18 @@ import { uploadDocument } from '@/api/uploads'
 import type { Document } from '@/types/document'
 import { getFileTypeLabel, formatSize } from '@/utils/fileType'
 
-// 上传对话框：拖拽 / 选择文件，显示进度
+// 上传对话框（2.6.5 支持多文件）：拖拽 / 选择多个文件，逐个上传显示总进度
 export default function UploadDialog({
   onClose,
   onUploaded,
   folderId,
 }: {
   onClose: () => void
-  onUploaded: (doc: Document) => void
+  onUploaded: (docs: Document[]) => void
   folderId?: string | null
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
-  const [file, setFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<File[]>([])
   const [title, setTitle] = useState('')
   const [progress, setProgress] = useState(0)
   const [uploading, setUploading] = useState(false)
@@ -22,21 +22,26 @@ export default function UploadDialog({
   const [error, setError] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
 
-  const pick = (f: File | null | undefined) => {
-    if (!f) return
-    setFile(f)
-    if (!title) setTitle(f.name.replace(/\.[^.]+$/, ''))
+  const pick = (list: FileList | File[] | null | undefined) => {
+    if (!list || list.length === 0) return
+    const picked = Array.from(list)
+    setFiles((prev) => [...prev, ...picked])
+    if (picked.length === 1 && !title) setTitle(picked[0].name.replace(/\.[^.]+$/, ''))
     setError(null)
   }
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setDragging(false)
-    pick(e.dataTransfer.files?.[0])
+    pick(e.dataTransfer.files)
+  }
+
+  const removeFile = (idx: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== idx))
   }
 
   const handleSubmit = async () => {
-    if (!file) {
+    if (files.length === 0) {
       setError('请先选择文件')
       return
     }
@@ -44,12 +49,18 @@ export default function UploadDialog({
     setError(null)
     setProgress(0)
     setStage('uploading')
+    const uploaded: Document[] = []
     try {
-      const doc = await uploadDocument(file, title, (p) => {
-        setProgress(p)
-        if (p >= 100) setStage('recording')
-      }, folderId)
-      onUploaded(doc)
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i]
+        // 仅单文件时允许自定义标题，多文件使用各自文件名
+        const doc = await uploadDocument(f, files.length === 1 ? title : undefined, (p) => {
+          setProgress(Math.round(((i + p / 100) / files.length) * 100))
+          if (p >= 100 && i === files.length - 1) setStage('recording')
+        }, folderId)
+        uploaded.push(doc)
+      }
+      onUploaded(uploaded)
       onClose()
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string } } }
@@ -73,9 +84,9 @@ export default function UploadDialog({
           </button>
         </div>
 
-        {/* 拖拽区 */}
+        {/* 拖拽区（支持多文件） */}
         <div
-          className={`dropzone ${dragging ? 'dragging' : ''} ${file ? 'has-file' : ''}`}
+          className={`dropzone ${dragging ? 'dragging' : ''} ${files.length > 0 ? 'has-file' : ''}`}
           onDragOver={(e) => {
             e.preventDefault()
             setDragging(true)
@@ -87,16 +98,43 @@ export default function UploadDialog({
           <input
             ref={inputRef}
             type="file"
+            multiple
             hidden
-            onChange={(e) => pick(e.target.files?.[0])}
+            onChange={(e) => {
+              pick(e.target.files)
+              e.target.value = ''
+            }}
             accept=".pdf,.docx,.doc,.xlsx,.xls,.csv,.pptx,.ppt,.txt,.md,.markdown,.png,.jpg,.jpeg,.gif,.webp,.svg,.json,.xml"
           />
-          {file ? (
+          {files.length > 0 ? (
             <div className="dropzone-file">
-              <div className="dropzone-file-name">{file.name}</div>
-              <div className="dropzone-file-meta">
-                {getFileTypeLabel(getExtType(file.name))} · {formatSize(file.size)}
-              </div>
+              {files.slice(0, 5).map((f, i) => (
+                <div key={`${f.name}-${i}`} className="dropzone-file-row">
+                  <span className="dropzone-file-name">
+                    {getFileTypeLabel(getExtType(f.name))} · {formatSize(f.size)}
+                  </span>
+                  <span className="dropzone-file-title">{f.name}</span>
+                  {!uploading && (
+                    <button
+                      className="dropzone-file-remove"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        removeFile(i)
+                      }}
+                      aria-label="移除"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              ))}
+              {files.length > 5 && (
+                <div className="dropzone-file-meta">等共 {files.length} 个文件</div>
+              )}
+              <div className="dropzone-file-meta">点击可继续添加文件</div>
             </div>
           ) : (
             <div className="dropzone-hint">
@@ -105,23 +143,25 @@ export default function UploadDialog({
                 <polyline points="17 8 12 3 7 8" />
                 <line x1="12" y1="3" x2="12" y2="15" />
               </svg>
-              <p>点击或拖拽文件到此处上传</p>
+              <p>点击或拖拽文件到此处上传（可多选）</p>
               <span>支持 PDF / Word / 图片 / 文本 / Markdown，最大 100MB</span>
             </div>
           )}
         </div>
 
-        {/* 标题 */}
-        <label className="form-label">
-          标题
-          <input
-            className="form-input"
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="留空则使用文件名"
-          />
-        </label>
+        {/* 标题（仅单文件时可用） */}
+        {files.length === 1 && (
+          <label className="form-label">
+            标题
+            <input
+              className="form-input"
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="留空则使用文件名"
+            />
+          </label>
+        )}
 
         {/* 进度 */}
         {uploading && (
@@ -139,8 +179,8 @@ export default function UploadDialog({
           <button className="btn-ghost" onClick={onClose} disabled={uploading}>
             取消
           </button>
-          <button className="btn-primary" onClick={handleSubmit} disabled={uploading || !file}>
-            {uploading ? '上传中...' : '上传'}
+          <button className="btn-primary" onClick={handleSubmit} disabled={uploading || files.length === 0}>
+            {uploading ? '上传中...' : `上传${files.length > 1 ? ` ${files.length} 个文件` : ''}`}
           </button>
         </div>
       </div>

@@ -108,7 +108,7 @@ export function uploadToQiniu(
  */
 export async function uploadDocument(
   file: File,
-  title: string,
+  title?: string,
   onProgress?: (percent: number) => void,
   folderId?: string | null,
 ): Promise<Document> {

@@ -73,9 +73,28 @@ export default function Documents() {
     return 'grid'
   })
 
-  // 文件夹导航
-  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null)
-  const [pathStack, setPathStack] = useState<PathItem[]>([{ id: null, name: '全部文档' }])
+  // 文件夹导航（2.6.5：持久化到 sessionStorage，从文档返回时恢复所在文件夹）
+  const [pathStack, setPathStack] = useState<PathItem[]>(() => {
+    try {
+      const raw = sessionStorage.getItem('nb-doc-path')
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed
+      }
+    } catch {
+      /* ignore */
+    }
+    return [{ id: null, name: '全部文档' }]
+  })
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(pathStack[pathStack.length - 1].id)
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem('nb-doc-path', JSON.stringify(pathStack))
+    } catch {
+      /* ignore */
+    }
+  }, [pathStack])
 
   // 键盘导航
   const [focusIndex, setFocusIndex] = useState(-1)
@@ -833,6 +852,16 @@ export default function Documents() {
               </button>
               <button className="ctx-menu-item" onClick={() => { handleShareDoc({ id: ctxMenu.id, title: ctxMenu.title } as Document); closeCtxMenu() }}>
                 分享
+              </button>
+              <button className="ctx-menu-item" onClick={() => {
+                const name = prompt('请输入新的名称：', ctxMenu.title)
+                if (name !== null && name.trim()) {
+                  updateDocument(ctxMenu.id, { title: name.trim() })
+                    .then(() => { load(); closeCtxMenu() })
+                    .catch(() => alert('重命名失败'))
+                }
+              }}>
+                更名
               </button>
               <div className="ctx-menu-sep" />
               <button className="ctx-menu-item" onClick={() => {
