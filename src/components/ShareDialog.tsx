@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { createShareLink } from '@/api/share'
+import { siteUrl } from '@/utils/site'
 
 interface ShareDialogProps {
   docId: string
@@ -30,7 +31,7 @@ export default function ShareDialog({ docId, onClose }: ShareDialogProps) {
   }
 
   const copy = () => {
-    navigator.clipboard.writeText(`${window.location.origin}${url}`).then(() => {
+    navigator.clipboard.writeText(siteUrl(url)).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     })
@@ -65,7 +66,7 @@ export default function ShareDialog({ docId, onClose }: ShareDialogProps) {
           {url ? (
             <div className="form-group">
               <div style={{ display: 'flex', gap: 6 }}>
-                <input className="form-input" style={{ flex: 1, marginTop: 0 }} value={`${window.location.origin}${url}`} readOnly />
+                <input className="form-input" style={{ flex: 1, marginTop: 0 }} value={siteUrl(url)} readOnly />
                 <button className="btn-primary" style={{ margin: 0, whiteSpace: 'nowrap' }} onClick={copy}>{copied ? '已复制' : '复制'}</button>
               </div>
             </div>

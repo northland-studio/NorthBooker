@@ -10,6 +10,7 @@ import Pages from '@/pages/Pages'
 import PageEditor from '@/pages/PageEditor'
 import CoWorkPanel from '@/pages/CoWorkPanel'
 import ProfilePage from '@/pages/ProfilePage'
+import SharePage from '@/pages/SharePage'
 import PageTerms from '@/pages/PageTerms'
 import PageDownload from '@/pages/PageDownload'
 import { useAuthStore } from '@/store/auth'
@@ -50,6 +51,8 @@ export default function App() {
       <Routes>
         {/* OAuth 回调页：独立全屏，不走 Layout */}
         <Route path="/callback" element={<AuthCallback />} />
+        {/* 分享落地页：公开可看，独立布局 */}
+        <Route path="/share/:token" element={<SharePage />} />
         <Route element={<Layout />}>
           <Route path="/" element={<Documents />} />
           <Route path="/viewer/:id" element={<Viewer />} />

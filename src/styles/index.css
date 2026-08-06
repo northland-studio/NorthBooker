@@ -5252,3 +5252,206 @@ body.dark .tts-reading-highlight {
   max-width: 180px;
 }
 
+/* ===== 2.6.5：分享落地页 ===== */
+.share-page {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+}
+.share-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.share-head-info {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.share-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.share-meta {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.share-preview {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.share-lock-card {
+  max-width: 420px;
+  margin: 80px auto;
+  padding: 40px 28px;
+  text-align: center;
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  display: flex;
+  flex-direction: column;
+  color: var(--color-text-muted);
+}
+.share-lock-card svg {
+  margin: 0 auto 12px;
+  color: var(--color-primary);
+}
+.share-lock-card h2 {
+  font-size: 18px;
+  color: var(--color-text);
+  margin-bottom: 6px;
+}
+.share-lock-card p {
+  font-size: 13px;
+}
+.share-lock-card .form-error {
+  margin-top: 8px;
+}
+.share-page-content {
+  flex: 1;
+  width: 100%;
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 24px 20px 64px;
+}
+.share-content-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+.share-content-body {
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--color-text);
+}
+.share-content-body h1 {
+  font-size: 1.8em;
+  font-weight: 700;
+  margin: 24px 0 12px;
+}
+.share-content-body h2 {
+  font-size: 1.5em;
+  font-weight: 600;
+  margin: 20px 0 10px;
+}
+.share-content-body h3 {
+  font-size: 1.25em;
+  font-weight: 600;
+  margin: 16px 0 8px;
+}
+.share-content-body p {
+  margin: 0 0 8px;
+}
+.share-content-body a {
+  color: var(--color-primary);
+  text-decoration: underline;
+}
+.share-content-body ul,
+.share-content-body ol {
+  padding-left: 24px;
+  margin: 8px 0;
+}
+.share-content-body blockquote {
+  border-left: 3px solid var(--color-primary);
+  margin: 12px 0;
+  padding: 4px 16px;
+  color: var(--color-text-muted);
+  background: var(--color-card);
+}
+.share-content-body code {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  padding: 2px 6px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 0.9em;
+}
+.share-content-body pre {
+  background: var(--color-card);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin: 12px 0;
+  overflow-x: auto;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 0.85em;
+  line-height: 1.5;
+}
+.share-content-body img {
+  max-width: 100%;
+  border-radius: 6px;
+  margin: 8px 0;
+}
+
+/* ===== 2.6.5：多文件上传 ===== */
+.dropzone-file {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: stretch;
+  text-align: left;
+}
+.dropzone-file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  min-width: 0;
+}
+.dropzone-file-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--color-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dropzone-file-row .dropzone-file-name {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+.dropzone-file-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.dropzone-file-remove:hover {
+  background: rgba(220, 38, 38, 0.1);
+  color: var(--color-danger);
+}
+

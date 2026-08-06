@@ -5,6 +5,7 @@ import { useThemeStore } from '@/store/theme'
 import { fetchDocumentById } from '@/api/documents'
 import { getFileTypeLabel, formatSize, formatDate } from '@/utils/fileType'
 import { resolveUri } from '@/utils/url'
+import { siteUrl } from '@/utils/site'
 import { createShareLink } from '@/api/share'
 import BookmarkButton from '@/components/BookmarkButton'
 import CommentPanel from '@/components/CommentPanel'
@@ -118,7 +119,7 @@ export default function Viewer() {
   }, [doc, officeBuffer])
 
   const handleCopyLink = () => {
-    const url = window.location.href
+    const url = siteUrl(`/viewer/${doc?.id ?? ''}`)
     const text = `【${doc?.title ?? ''}】${url}`
     navigator.clipboard.writeText(text).then(() => {
       setCopied(true)

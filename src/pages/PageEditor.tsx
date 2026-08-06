@@ -28,6 +28,7 @@ import { isAdmin } from '@/types/user'
 import { useT } from '@/i18n'
 import { useThemeStore } from '@/store/theme'
 import { formatDate } from '@/utils/fileType'
+import { siteUrl } from '@/utils/site'
 import DocSearch from '@/components/DocSearch'
 import ShareDialog from '@/components/ShareDialog'
 import CommentPanel from '@/components/CommentPanel'
@@ -950,7 +951,7 @@ export default function PageEditor() {
   }
 
   const handleShare = () => {
-    const url = window.location.href
+    const url = siteUrl(`/pages/${id ?? ''}`)
     navigator.clipboard.writeText(url).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
