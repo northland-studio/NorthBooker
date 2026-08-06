@@ -36,7 +36,8 @@ function cloudflareFix(): Plugin {
 // 北牖 NorthBooker 构建配置
 export default defineConfig({
   plugins: [react(), docPreviewWorkerFix(), cloudflareFix()],
-  base: './',
+  // 资源使用绝对路径，保证 /share/:token 等子路径直链下资源可正确加载
+  base: '/',
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
