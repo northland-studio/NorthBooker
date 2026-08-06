@@ -100,7 +100,7 @@ export default function Viewer() {
   }
 
   const handleCopyShareUrl = () => {
-    navigator.clipboard.writeText(shareUrl).then(() => {
+    navigator.clipboard.writeText(siteUrl(shareUrl)).then(() => {
       setShareCopied(true)
       setTimeout(() => setShareCopied(false), 2000)
     })
@@ -264,7 +264,7 @@ export default function Viewer() {
             {shareUrl ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <input className="form-input" style={{ flex: 1, marginTop: 0 }} value={shareUrl} readOnly />
+                  <input className="form-input" style={{ flex: 1, marginTop: 0 }} value={siteUrl(shareUrl)} readOnly />
                   <button className="btn-primary" style={{ margin: 0, whiteSpace: 'nowrap', padding: '10px 14px', fontSize: 13 }} onClick={handleCopyShareUrl}>
                     {shareCopied ? '已复制' : '复制'}
                   </button>
