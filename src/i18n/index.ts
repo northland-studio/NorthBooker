@@ -17,6 +17,7 @@ const zh: Record<string, string> = {
   // 导航
   'nav.onlineDocs': '在线文档',
   'nav.download': '应用下载',
+  'nav.guide': '使用说明',
   'nav.terms': '用户协议',
   'nav.settings': '桌面端设置',
   'nav.menu': '菜单',
@@ -303,6 +304,7 @@ const en: Record<string, string> = {
   // Navigation
   'nav.onlineDocs': 'Online Docs',
   'nav.download': 'Download',
+  'nav.guide': 'Guide',
   'nav.terms': 'Terms',
   'nav.settings': 'Desktop Settings',
   'nav.menu': 'Menu',

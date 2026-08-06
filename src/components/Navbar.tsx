@@ -27,6 +27,7 @@ export default function Navbar() {
         <nav className={`navbar-links ${menuOpen ? 'navbar-links--open' : ''}`}>
           <Link to="/pages" className="navbar-link" onClick={closeMenu}>{t('nav.onlineDocs')}</Link>
           {!isElectron && <Link to="/download" className="navbar-link" onClick={closeMenu}>{t('nav.download')}</Link>}
+          {!isElectron && <Link to="/guide" className="navbar-link" onClick={closeMenu}>{t('nav.guide')}</Link>}
           <Link to="/terms" className="navbar-link" onClick={closeMenu}>{t('nav.terms')}</Link>
         </nav>
       </div>

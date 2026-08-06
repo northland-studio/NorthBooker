@@ -11,6 +11,7 @@ import PageEditor from '@/pages/PageEditor'
 import CoWorkPanel from '@/pages/CoWorkPanel'
 import ProfilePage from '@/pages/ProfilePage'
 import SharePage from '@/pages/SharePage'
+import UsageGuide from '@/pages/UsageGuide'
 import PageTerms from '@/pages/PageTerms'
 import PageDownload from '@/pages/PageDownload'
 import { useAuthStore } from '@/store/auth'
@@ -71,6 +72,10 @@ export default function App() {
           />
           <Route path="/terms" element={<PageTerms />} />
           <Route path="/download" element={<PageDownload />} />
+          {/* 使用说明：仅网页版显示（Electron 隐藏入口与路由） */}
+          {!(window as any).electronAPI?.isElectron && (
+            <Route path="/guide" element={<UsageGuide />} />
+          )}
           {/* 管理后台：要求登录且 level >= 1 */}
           <Route
             path="/admin"
